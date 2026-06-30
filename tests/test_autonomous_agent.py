@@ -150,3 +150,57 @@ def test_recall_recent_agent_memory_prefers_latest_rows(db):
     summary = web_app.recall_recent_agent_memory(db, limit=1)
     assert summary["items"][0]["tags"] == "defensive,etf"
     assert summary["notes"] == ["latest"]
+
+
+@pytest.mark.parametrize("content_json", ['["not", "a", "dict"]', '"freeform"', "123", "null"])
+def test_recall_recent_agent_memory_coerces_non_dict_payloads(content_json, db):
+    db.add(
+        web_app.AgentMemoryModel(
+            memory_type="short_term",
+            memory_date=datetime(2026, 6, 30, 15, 5),
+            tags="edge-case",
+            content_json=content_json,
+            relevance_score=0.4,
+        )
+    )
+    db.commit()
+
+    summary = web_app.recall_recent_agent_memory(db, limit=1)
+
+    assert summary["items"][0]["content"] == {}
+    assert summary["notes"] == []
+
+
+def test_recall_recent_agent_memory_handles_malformed_json_and_aggregates_notes(db):
+    db.add_all(
+        [
+            web_app.AgentMemoryModel(
+                memory_type="short_term",
+                memory_date=datetime(2026, 6, 30, 15, 3),
+                tags="latest",
+                content_json='{"notes": ["latest-a", "latest-b"]}',
+                relevance_score=0.9,
+            ),
+            web_app.AgentMemoryModel(
+                memory_type="short_term",
+                memory_date=datetime(2026, 6, 30, 15, 2),
+                tags="bad-json",
+                content_json='{"notes": ["missing bracket"}',
+                relevance_score=0.2,
+            ),
+            web_app.AgentMemoryModel(
+                memory_type="short_term",
+                memory_date=datetime(2026, 6, 30, 15, 1),
+                tags="older",
+                content_json='{"notes": ["older-a", "older-b", "older-c", "older-d"]}',
+                relevance_score=0.7,
+            ),
+        ]
+    )
+    db.commit()
+
+    summary = web_app.recall_recent_agent_memory(db, limit=3)
+
+    assert [item["tags"] for item in summary["items"]] == ["latest", "bad-json", "older"]
+    assert summary["items"][1]["content"] == {}
+    assert summary["notes"] == ["latest-a", "latest-b", "older-a", "older-b", "older-c"]

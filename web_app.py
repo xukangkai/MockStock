@@ -845,9 +845,11 @@ def cap_target_pct(target_pct: float, max_position_pct: float) -> float:
 
 
 def safe_json_loads(raw: str, default):
+    if not raw:
+        return default
     try:
-        return json.loads(raw) if raw else default
-    except Exception:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
         return default
 
 
@@ -859,9 +861,9 @@ def build_agent_cycle_context(cycle_id: str, timestamp: str, account_info: Dict,
                               market_sentiment: Dict, engine_params: Dict,
                               recent_trades: List[Dict], recent_decisions: List[Dict],
                               memory_summary: Dict) -> Dict:
-    return {
-        "cycle_id": cycle_id,
-        "timestamp": timestamp,
+    # Parameter names use *_ctx/*_info suffixes, while returned keys stay aligned
+    # with the stable agent payload consumed elsewhere in the harness.
+    context_sections = {
         "account": account_info,
         "positions": positions_ctx,
         "candidate_pool": candidates_ctx,
@@ -869,6 +871,11 @@ def build_agent_cycle_context(cycle_id: str, timestamp: str, account_info: Dict,
         "engine_params": engine_params,
         "recent_trades": recent_trades,
         "recent_decisions": recent_decisions,
+    }
+    return {
+        "cycle_id": cycle_id,
+        "timestamp": timestamp,
+        **context_sections,
         "memory_summary": memory_summary or {"items": [], "notes": []},
     }
 
@@ -882,6 +889,15 @@ def recall_recent_agent_memory(db: Session, limit: int = 5, memory_type: str = "
     notes = []
     for row in rows:
         payload = safe_json_loads(row.content_json, {})
+        if not isinstance(payload, dict):
+            payload = {}
+
+        row_notes = payload.get("notes", [])
+        if isinstance(row_notes, list):
+            notes.extend(str(note) for note in row_notes if note is not None)
+        elif row_notes:
+            notes.append(str(row_notes))
+
         items.append({
             "id": row.id,
             "memory_type": row.memory_type,
@@ -890,7 +906,6 @@ def recall_recent_agent_memory(db: Session, limit: int = 5, memory_type: str = "
             "content": payload,
             "relevance_score": row.relevance_score,
         })
-        notes.extend(payload.get("notes", []))
 
     return {"items": items, "notes": notes[:5]}
 
