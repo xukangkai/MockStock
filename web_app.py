@@ -794,6 +794,27 @@ def calc_target_delta_amount(current_pct: float, target_pct: float, total_equity
         return 0.0
     return round((target_pct - current_pct) / 100 * total_equity, 2)
 
+
+def normalize_position_action(item: Dict) -> str:
+    action = str(item.get("action", "hold")).lower().strip()
+    if action in {"add", "hold", "reduce", "exit"}:
+        return action
+    return "hold"
+
+
+def allow_add_action(pnl_pct: float, current_pct: float, target_pct: float,
+                     max_position_pct: float, trend_ok: bool) -> bool:
+    if not trend_ok:
+        return False
+    if pnl_pct < 0:
+        return False
+    if target_pct <= current_pct:
+        return False
+    if target_pct > max_position_pct:
+        return False
+    return True
+
+
 def take_snapshot(db: Session, note: str = ""):
     """记录权益快照。注意：不负责 commit，由调用方统一提交。"""
     acct = get_account(db)
