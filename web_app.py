@@ -3130,6 +3130,56 @@ def api_pet_stats():
         }
 
 
+@app.get("/api/agent/cycles")
+def api_agent_cycles(limit: int = 30):
+    """返回最近的 Agent 决策周期列表，含每个周期的节点摘要。"""
+    with SessionLocal() as db:
+        cycles = db.query(AgentCycleLogModel).order_by(AgentCycleLogModel.id.desc()).limit(limit).all()
+        result = []
+        for c in cycles:
+            # Get nodes for this cycle
+            nodes = db.query(AgentNodeLogModel).filter(
+                AgentNodeLogModel.cycle_id == c.cycle_id
+            ).order_by(AgentNodeLogModel.id).all()
+
+            # Parse plan JSON safely
+            plan = safe_json_loads(c.plan_json, {})
+
+            result.append({
+                "cycle_id": c.cycle_id,
+                "created_at": c.time.strftime("%Y-%m-%d %H:%M:%S") if c.time else "",
+                "status": c.status or "ok",
+                "risk_level": c.risk_level or "mid",
+                "summary": c.summary or "",
+                "triggered_trade": bool(c.triggered_trade),
+                "plan": plan,
+                "reasoning": plan.get("reasoning", []),
+                "nodes": [{
+                    "node_name": n.node_name,
+                    "input_summary": n.input_summary or "",
+                    "output_summary": n.output_summary or "",
+                } for n in nodes],
+            })
+        return result
+
+
+@app.get("/api/agent/memory")
+def api_agent_memory(scope: Optional[str] = None, limit: int = 50):
+    """返回 Agent 记忆列表，可按 scope 过滤。"""
+    with SessionLocal() as db:
+        q = db.query(AgentMemoryModel).order_by(AgentMemoryModel.id.desc())
+        if scope:
+            q = q.filter(AgentMemoryModel.memory_type == scope)
+        rows = q.limit(limit).all()
+        return [{
+            "id": r.id,
+            "memory_type": r.memory_type or "",
+            "memory_date": r.memory_date.isoformat() if r.memory_date else "",
+            "tags": r.tags or "",
+            "content": safe_json_loads(r.content_json, {}),
+        } for r in rows]
+
+
 def main():
     port = int(os.environ.get("PORT", 8080))
     db_label = "SQLite" if DB_TYPE == "sqlite" else f"MySQL ({DB_HOST}:{DB_PORT}/{DB_NAME})"
