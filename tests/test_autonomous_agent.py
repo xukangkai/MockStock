@@ -1,6 +1,6 @@
+import json
 import uuid
-from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 import pytest
 from sqlalchemy import create_engine, inspect
@@ -80,12 +80,23 @@ def test_agent_tables_are_created(db):
     assert "agent_feedback" in tables
 
 
-def test_agent_memory_model_persists_json_content(db):
+def test_agent_tables_use_explicit_autoincrement_ids():
+    for model in (
+        web_app.AgentCycleLogModel,
+        web_app.AgentNodeLogModel,
+        web_app.AgentMemoryModel,
+        web_app.AgentFeedbackModel,
+    ):
+        assert model.__table__.c.id.autoincrement is True
+
+
+def test_agent_memory_model_round_trips_json_content(db):
+    payload = {"notes": ["avoid chasing", "wait for pullback"]}
     row = web_app.AgentMemoryModel(
         memory_type="short_term",
         memory_date=datetime(2026, 6, 30, 15, 1),
         tags="defensive,bank",
-        content_json='{"notes": ["avoid chasing"]}',
+        content_json=json.dumps(payload, ensure_ascii=False),
         relevance_score=0.8,
     )
     db.add(row)
@@ -93,4 +104,5 @@ def test_agent_memory_model_persists_json_content(db):
 
     saved = db.query(web_app.AgentMemoryModel).one()
     assert saved.memory_type == "short_term"
-    assert "avoid chasing" in saved.content_json
+    assert json.loads(saved.content_json) == payload
+    assert json.loads(saved.content_json)["notes"] == ["avoid chasing", "wait for pullback"]

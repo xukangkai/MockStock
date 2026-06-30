@@ -221,7 +221,7 @@ class DecisionLogModel(Base):
 class AgentCycleLogModel(Base):
     __tablename__ = "agent_cycle_logs"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     cycle_id = Column(String(64), unique=True, index=True, nullable=False)
     time = Column(DateTime, default=datetime.now, index=True)
     status = Column(String(16), default="success")
@@ -234,7 +234,7 @@ class AgentCycleLogModel(Base):
 class AgentNodeLogModel(Base):
     __tablename__ = "agent_node_logs"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     cycle_id = Column(String(64), index=True, nullable=False)
     node_name = Column(String(64), index=True, nullable=False)
     time = Column(DateTime, default=datetime.now, index=True)
@@ -247,7 +247,7 @@ class AgentNodeLogModel(Base):
 class AgentMemoryModel(Base):
     __tablename__ = "agent_memories"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     memory_type = Column(String(32), index=True, nullable=False)
     memory_date = Column(DateTime, default=datetime.now, index=True)
     tags = Column(String(255), default="")
@@ -257,7 +257,7 @@ class AgentMemoryModel(Base):
 class AgentFeedbackModel(Base):
     __tablename__ = "agent_feedback"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     cycle_id = Column(String(64), index=True, nullable=False)
     symbol = Column(String(16), index=True, nullable=False)
     action_type = Column(String(16), nullable=False)
