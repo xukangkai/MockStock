@@ -782,6 +782,18 @@ def calc_current_equity(db: Session) -> Tuple[float, List[Dict]]:
     db.flush()
     return acct.cash + total_hold, rows
 
+
+def calc_position_pct(market_value: float, total_equity: float) -> float:
+    if total_equity <= 0:
+        return 0.0
+    return round(market_value / total_equity * 100, 2)
+
+
+def calc_target_delta_amount(current_pct: float, target_pct: float, total_equity: float) -> float:
+    if total_equity <= 0:
+        return 0.0
+    return round((target_pct - current_pct) / 100 * total_equity, 2)
+
 def take_snapshot(db: Session, note: str = ""):
     """记录权益快照。注意：不负责 commit，由调用方统一提交。"""
     acct = get_account(db)
