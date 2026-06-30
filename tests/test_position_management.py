@@ -108,3 +108,18 @@ def test_should_force_exit_on_stop_loss_returns_true():
         trend_broken=False,
     )
     assert force_exit is True
+
+
+def test_calc_trade_qty_for_reduce_uses_target_delta():
+    qty = web_app.calc_trade_qty_from_delta(delta_amount=-1500, price=5.0)
+    assert qty == 300
+
+
+def test_calc_trade_qty_for_add_uses_target_delta():
+    qty = web_app.calc_trade_qty_from_delta(delta_amount=1500, price=5.0)
+    assert qty == 300
+
+
+def test_calc_trade_qty_returns_zero_for_small_delta():
+    qty = web_app.calc_trade_qty_from_delta(delta_amount=200, price=5.0)
+    assert qty == 0

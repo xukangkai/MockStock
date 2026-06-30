@@ -795,6 +795,13 @@ def calc_target_delta_amount(current_pct: float, target_pct: float, total_equity
     return round((target_pct - current_pct) / 100 * total_equity, 2)
 
 
+def calc_trade_qty_from_delta(delta_amount: float, price: float) -> int:
+    if price <= 0:
+        return 0
+    raw_qty = int(abs(delta_amount) / price)
+    return round_lot(raw_qty)
+
+
 def normalize_position_action(item: Dict) -> str:
     action = str(item.get("action", "hold")).lower().strip()
     if action in {"add", "hold", "reduce", "exit"}:
@@ -1839,33 +1846,76 @@ class AutonomousTradingEngine:
             add_realtime_log("ai", f"📈 市场分析: {market_analysis[:150]}")
         add_realtime_log("info", f"⚡ 风险等级: {risk_level}")
 
-        # ── 6. 执行 AI 的持仓决策（卖/持有） ──
+        # ── 6. 执行 AI 的持仓决策（加/持/减/退） ──
+        total_equity, _ = calc_current_equity(db)
         position_actions = decision.get("position_actions", [])
         for pa in position_actions:
-            sym = normalize_symbol(pa.get("symbol", ""))
-            action = pa.get("action", "hold")
-            reason = pa.get("reason", "")
-            confidence = pa.get("confidence", 0)
+            parsed = parse_position_action(pa)
+            sym = parsed["symbol"]
+            action = parsed["action"]
+            reason = parsed["reason"]
+            confidence = parsed["confidence"]
+            target_pct = parsed["target_pct"]
 
-            if action == "sell" and confidence >= 60 and sym not in sold_symbols:
-                pos = db.query(PositionModel).filter(PositionModel.symbol == sym, PositionModel.qty > 0).first()
-                if pos:
-                    avails = calc_available_to_sell(db, sym)
-                    if avails > 0:
-                        quote = fetch_quote(sym)
-                        price = quote["price"] if quote else pos.last_price
-                        add_realtime_log("ai", f"🤖 AI建议卖出 {sym} (信心: {confidence}%)")
-                        add_realtime_log("info", f"💡 理由: {reason[:80]}")
-                        result = exec_sell(db, sym, price, avails,
-                                           reason=f"AI卖出(信心{confidence}%): {reason[:100]}",
-                                           is_etf=is_etf_code(sym))
-                        if result["ok"]:
-                            add_realtime_log("success", f"✅ AI卖出成功: {sym} @ ¥{price:.2f}")
-                            sold_symbols.add(sym)
-                            print(f"[AI] 卖出 {sym} {avails}股 @ {price} {reason[:80]}")
-            elif action == "hold":
+            pos = db.query(PositionModel).filter(PositionModel.symbol == sym, PositionModel.qty > 0).first()
+            if not pos or sym in sold_symbols:
+                continue
+
+            avails = calc_available_to_sell(db, sym)
+            quote = fetch_quote(sym)
+            price = quote["price"] if quote else (pos.last_price or pos.avg_cost)
+            pnl_pct = (price / pos.avg_cost - 1) * 100 if pos.avg_cost else 0
+            current_pct = calc_position_pct(price * pos.qty, total_equity)
+
+            if action == "hold":
                 add_realtime_log("info", f"🤖 AI建议继续持有 {sym} (信心: {confidence}%)")
-                log_decision(db, "hold", sym, "", 0, score=confidence, reason=f"AI综合决策: 继续持有 - {reason[:100]}")
+                log_decision(db, "hold", sym, pos.name, price, score=confidence, reason=f"AI综合决策: 继续持有 - {reason[:100]}")
+            elif action == "exit":
+                if avails <= 0:
+                    continue
+                add_realtime_log("ai", f"🤖 AI建议退出 {sym} (信心: {confidence}%)")
+                add_realtime_log("info", f"💡 理由: {reason[:80]}")
+                result = exec_sell(db, sym, price, avails,
+                                   reason=f"AI退出(信心{confidence}%): {reason[:100]}",
+                                   is_etf=is_etf_code(sym))
+                if result["ok"]:
+                    add_realtime_log("success", f"✅ AI退出成功: {sym} @ ¥{price:.2f}")
+                    sold_symbols.add(sym)
+                    print(f"[AI] 退出 {sym} {avails}股 @ {price} {reason[:80]}")
+            elif action == "reduce":
+                delta_amount = calc_target_delta_amount(current_pct, target_pct, total_equity)
+                qty = calc_trade_qty_from_delta(delta_amount, price)
+                qty = round_lot(min(qty, avails))
+                if qty <= 0:
+                    log_decision(db, "skip", sym, pos.name, price, score=confidence, reason="目标仓位变化不足一手")
+                    continue
+                add_realtime_log("ai", f"🤖 AI建议减仓 {sym} {qty}股 (信心: {confidence}%)")
+                add_realtime_log("info", f"💡 理由: {reason[:80]}")
+                result = exec_sell(db, sym, price, qty,
+                                   reason=f"AI减仓(信心{confidence}% 目标{target_pct}%): {reason[:100]}",
+                                   is_etf=is_etf_code(sym))
+                if result["ok"]:
+                    add_realtime_log("success", f"✅ AI减仓成功: {sym} {qty}股 @ ¥{price:.2f}")
+                    print(f"[AI] 减仓 {sym} {qty}股 @ {price} {reason[:80]}")
+            elif action == "add":
+                delta_amount = calc_target_delta_amount(current_pct, target_pct, total_equity)
+                qty = calc_trade_qty_from_delta(delta_amount, price)
+                if qty <= 0:
+                    log_decision(db, "skip", sym, pos.name, price, score=confidence, reason="目标仓位变化不足一手")
+                    continue
+                if not allow_add_action(pnl_pct, current_pct, target_pct, self.max_position_pct, trend_ok=True):
+                    log_decision(db, "skip", sym, pos.name, price, score=confidence, reason=f"不满足加仓条件: 当前{current_pct:.2f}% 目标{target_pct:.2f}%")
+                    continue
+                add_realtime_log("ai", f"🤖 AI建议加仓 {sym} {qty}股 (信心: {confidence}%)")
+                add_realtime_log("info", f"💡 理由: {reason[:80]}")
+                result = exec_buy(db, sym, pos.name, price, qty,
+                                  stop_loss=pos.stop_loss, reason=f"AI加仓(信心{confidence}% 目标{target_pct}%): {reason[:100]}",
+                                  score=confidence, is_etf=is_etf_code(sym))
+                if result["ok"]:
+                    gross = qty * price
+                    self._buy_amount_today += gross
+                    add_realtime_log("success", f"✅ AI加仓成功: {sym} {qty}股 @ ¥{price:.2f}")
+                    print(f"[AI] 加仓 {sym} {qty}股 @ {price} {reason[:80]}")
 
         db.commit()
         acct = get_account(db)
