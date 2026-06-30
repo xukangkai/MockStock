@@ -840,6 +840,14 @@ def allow_add_action(pnl_pct: float, current_pct: float, target_pct: float,
     return True
 
 
+def allow_reduce_action(current_pct: float, target_pct: float) -> bool:
+    return target_pct < current_pct
+
+
+def has_remaining_position_capacity(open_count: int, max_positions: int, remaining_capacity: int) -> bool:
+    return open_count < max_positions and remaining_capacity > 0
+
+
 def should_force_exit(pnl_pct: float, stop_loss_pct: float, trend_broken: bool = False) -> bool:
     if pnl_pct <= -abs(stop_loss_pct):
         return True
@@ -1888,6 +1896,9 @@ class AutonomousTradingEngine:
                     sold_symbols.add(sym)
                     print(f"[AI] 退出 {sym} {avails}股 @ {price} {reason[:80]}")
             elif action == "reduce":
+                if not allow_reduce_action(current_pct, target_pct):
+                    log_decision(db, "skip", sym, pos.name, price, score=confidence, reason=f"减仓目标无效: 当前{current_pct:.2f}% 目标{target_pct:.2f}%")
+                    continue
                 delta_amount = calc_target_delta_amount(current_pct, target_pct, total_equity)
                 if abs(delta_amount) < price * LOT_SIZE:
                     log_decision(db, "skip", sym, pos.name, price, score=confidence, reason="目标仓位变化不足一手")
@@ -1944,12 +1955,18 @@ class AutonomousTradingEngine:
 
         add_realtime_log("success", f"🎯 AI建议买入 {len(buy_picks)} 只候选")
         bought_this_round = False
+        open_count = len(existing_symbols)
+        remaining_capacity = max(0, self.max_positions - open_count)
         for i, pick in enumerate(buy_picks):
             sym = normalize_symbol(pick.get("symbol", ""))
             if not sym or sym in blocked_symbols:
                 if sym in sold_symbols:
                     add_realtime_log("info", f"⏭️ {sym} 刚卖出，本轮不买回")
                 continue
+            if not has_remaining_position_capacity(open_count, self.max_positions, remaining_capacity):
+                log_decision(db, "skip", sym, pick.get("name", sym), 0, reason=f"开仓名额不足 ({open_count}/{self.max_positions})")
+                add_realtime_log("warning", f"⚠️ 持仓名额已满，跳过新开仓 {sym}")
+                break
             if self._buy_amount_today >= self.max_buy_per_day:
                 add_realtime_log("warning", f"⚠️ 已达每日买入限额 ¥{self.max_buy_per_day:,.0f}")
                 break

@@ -92,6 +92,16 @@ def test_allow_add_allows_strong_trend_with_room():
     assert allowed is True
 
 
+def test_allow_reduce_rejects_inverted_target_pct():
+    allowed = web_app.allow_reduce_action(current_pct=20.0, target_pct=30.0)
+    assert allowed is False
+
+
+def test_has_remaining_position_capacity_blocks_when_none_left():
+    allowed = web_app.has_remaining_position_capacity(open_count=3, max_positions=3, remaining_capacity=0)
+    assert allowed is False
+
+
 def test_should_force_exit_on_profit_returns_false_for_take_profit_only():
     force_exit = web_app.should_force_exit(
         pnl_pct=12.5,
