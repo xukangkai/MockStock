@@ -829,6 +829,14 @@ def allow_add_action(pnl_pct: float, current_pct: float, target_pct: float,
     return True
 
 
+def should_force_exit(pnl_pct: float, stop_loss_pct: float, trend_broken: bool = False) -> bool:
+    if pnl_pct <= -abs(stop_loss_pct):
+        return True
+    if trend_broken:
+        return True
+    return False
+
+
 def take_snapshot(db: Session, note: str = ""):
     """记录权益快照。注意：不负责 commit，由调用方统一提交。"""
     acct = get_account(db)
@@ -1745,7 +1753,7 @@ class AutonomousTradingEngine:
             if avails <= 0:
                 continue
 
-            if pnl_pct <= -self.stop_loss_pct:
+            if should_force_exit(pnl_pct, self.stop_loss_pct):
                 add_realtime_log("warning", f"🚨 止损触发: {pos.symbol} {pnl_pct:.1f}% <= -{self.stop_loss_pct:.1f}%")
                 result = exec_sell(db, pos.symbol, price, avails,
                                    reason=f"止损线触发: {pnl_pct:.1f}% <= -{self.stop_loss_pct:.1f}%",
@@ -1756,14 +1764,7 @@ class AutonomousTradingEngine:
                 continue
 
             if pnl_pct >= self.take_profit_pct:
-                add_realtime_log("success", f"🎉 止盈触发: {pos.symbol} {pnl_pct:.1f}% >= {self.take_profit_pct:.1f}%")
-                result = exec_sell(db, pos.symbol, price, avails,
-                                   reason=f"止盈线触发: {pnl_pct:.1f}% >= {self.take_profit_pct:.1f}%",
-                                   is_etf=is_etf_code(pos.symbol))
-                if result["ok"]:
-                    add_realtime_log("success", f"✅ 止盈卖出: {pos.symbol} @ ¥{price:.2f}")
-                    sold_symbols.add(pos.symbol)
-                continue
+                add_realtime_log("info", f"📌 利润管理区: {pos.symbol} {pnl_pct:.1f}% >= {self.take_profit_pct:.1f}%")
 
             remaining_positions.append(pos)
 

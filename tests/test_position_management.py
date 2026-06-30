@@ -90,3 +90,21 @@ def test_allow_add_allows_strong_trend_with_room():
         trend_ok=True,
     )
     assert allowed is True
+
+
+def test_should_force_exit_on_profit_returns_false_for_take_profit_only():
+    force_exit = web_app.should_force_exit(
+        pnl_pct=12.5,
+        stop_loss_pct=5.0,
+        trend_broken=False,
+    )
+    assert force_exit is False
+
+
+def test_should_force_exit_on_stop_loss_returns_true():
+    force_exit = web_app.should_force_exit(
+        pnl_pct=-5.1,
+        stop_loss_pct=5.0,
+        trend_broken=False,
+    )
+    assert force_exit is True
