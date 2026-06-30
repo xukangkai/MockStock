@@ -53,47 +53,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-try:
-    from langgraph.graph import END, StateGraph
-except ImportError:
-    END = "__end__"
-
-    class _CompiledStateGraph:
-        def __init__(self, entry_point, edges, nodes):
-            self.entry_point = entry_point
-            self.edges = edges
-            self.nodes = nodes
-
-        def invoke(self, state):
-            current = self.entry_point
-            result = dict(state)
-            while current and current != END:
-                updates = self.nodes[current](result) or {}
-                if updates:
-                    result.update(updates)
-                current = self.edges.get(current)
-            return result
-
-    class StateGraph:
-        def __init__(self, _state_type):
-            self.entry_point = None
-            self.edges = {}
-            self.nodes = {}
-
-        def add_node(self, name, func):
-            self.nodes[name] = func
-
-        def set_entry_point(self, name):
-            self.entry_point = name
-
-        def add_edge(self, source, target):
-            self.edges[source] = target
-
-        def compile(self):
-            return _CompiledStateGraph(self.entry_point, self.edges, self.nodes)
-
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
+from langgraph.graph import END, StateGraph
 from sqlalchemy import (Boolean, Column, Date, DateTime, Float, Integer,
                          String, Text, create_engine, func)
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
