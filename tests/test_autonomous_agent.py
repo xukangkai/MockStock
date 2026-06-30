@@ -260,3 +260,30 @@ def test_run_trading_agent_cycle_returns_valid_plan(sample_context, monkeypatch)
     assert plan["portfolio_bias"] == "balanced"
     assert plan["position_actions"][0]["action"] == "hold"
     assert plan["risk_level"] == "medium"
+
+
+def test_run_market_analysis_node_bullish(sample_context):
+    sample_context["market_snapshot"]["score"] = 75
+    state = {"context": sample_context}
+    result = web_app.run_market_analysis_node(state)
+    assessment = result["market_assessment"]
+    assert assessment["regime"] == "bullish"
+    assert assessment["risk_bias"] == "aggressive"
+
+
+def test_run_market_analysis_node_defensive(sample_context):
+    sample_context["market_snapshot"]["score"] = 40
+    state = {"context": sample_context}
+    result = web_app.run_market_analysis_node(state)
+    assessment = result["market_assessment"]
+    assert assessment["regime"] == "defensive"
+    assert assessment["risk_bias"] == "conservative"
+
+
+def test_run_market_analysis_node_neutral(sample_context):
+    sample_context["market_snapshot"]["score"] = 55
+    state = {"context": sample_context}
+    result = web_app.run_market_analysis_node(state)
+    assessment = result["market_assessment"]
+    assert assessment["regime"] == "neutral"
+    assert assessment["risk_bias"] == "balanced"

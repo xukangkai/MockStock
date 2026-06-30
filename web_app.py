@@ -999,6 +999,7 @@ def run_decision_synthesizer_node(state: TradingAgentState) -> Dict[str, Any]:
 
 
 def build_trading_agent_graph():
+    """构建交易 Agent 有向图，串联记忆召回、市场分析、持仓审视、候选研究、风控审查和决策综合六个节点。"""
     graph = StateGraph(TradingAgentState)
     graph.add_node("recall_memory", lambda state: {"memory_summary": state["context"].get("memory_summary", {})})
     graph.add_node("analyze_market", run_market_analysis_node)
@@ -1019,9 +1020,24 @@ def build_trading_agent_graph():
 
 
 def run_trading_agent_cycle(context: Dict[str, Any]) -> Dict[str, Any]:
+    """执行一次完整的交易 Agent 决策周期，返回最终计划字典。异常时返回空安全计划。"""
     graph = build_trading_agent_graph()
-    result = graph.invoke({"context": context})
-    return result["final_plan"]
+    try:
+        result = graph.invoke({"context": context})
+        return result.get("final_plan", {})
+    except Exception as e:
+        print(f"[Agent] 交易周期执行异常: {e}")
+        return {
+            "cycle_id": context.get("cycle_id", ""),
+            "position_actions": [],
+            "new_entries": [],
+            "buy_picks": [],
+            "portfolio_bias": "balanced",
+            "cash_reserve_target": 1.0,
+            "summary": f"Agent 执行异常，已回退至安全计划: {e}",
+            "confidence": 0.0,
+            "risk_level": "high",
+        }
 
 
 def calc_target_delta_amount(current_pct: float, target_pct: float, total_equity: float) -> float:
