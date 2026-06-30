@@ -735,6 +735,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
         <tr><td>行情数据</td><td>新浪财经 API</td><td>实时股票/ETF 行情</td></tr>
         <tr><td>财务数据</td><td>akshare</td><td>A股财报、估值数据</td></tr>
         <tr><td>AI 模型</td><td>阿里百炼 DeepSeek</td><td>兼容 OpenAI API 格式</td></tr>
+        <tr><td>Agent 框架</td><td>LangGraph</td><td>多节点有向图编排，6 步决策链</td></tr>
         <tr><td>前端</td><td>HTML + CSS + JS + Chart.js</td><td>单页面应用，30 秒自动刷新</td></tr>
         <tr><td>交易引擎</td><td>Python Thread (daemon)</td><td>后台线程，3 分钟心跳</td></tr>
       </table>
@@ -748,6 +749,9 @@ tr:hover td { background: rgba(255,255,255,0.03); }
         <tr><td><code>trades</code></td><td>交易记录（买卖历史、实现盈亏）</td></tr>
         <tr><td><code>decisions</code></td><td>决策日志（每次引擎动作/不动作的原因）</td></tr>
         <tr><td><code>snapshots</code></td><td>权益快照（用于绘制权益曲线）</td></tr>
+        <tr><td><code>agent_cycle_logs</code></td><td>Agent 决策周期记录（上下文、计划、推理链）</td></tr>
+        <tr><td><code>agent_node_logs</code></td><td>Agent 节点执行日志（输入输出摘要）</td></tr>
+        <tr><td><code>agent_memories</code></td><td>Agent 记忆库（日终总结、市场观察、策略反思）</td></tr>
       </table>
     </div>
 
