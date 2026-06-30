@@ -17,6 +17,7 @@ import random
 import threading
 import time
 import traceback
+import uuid
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone, time as dtime
 
@@ -1038,6 +1039,54 @@ def run_trading_agent_cycle(context: Dict[str, Any]) -> Dict[str, Any]:
             "confidence": 0.0,
             "risk_level": "high",
         }
+
+
+def validate_final_trading_plan(plan: Dict[str, Any]) -> Dict[str, Any]:
+    """校验并清洗 Agent 输出的交易计划，确保下游不会因为脏数据崩溃。"""
+    if not isinstance(plan, dict):
+        return {"market_analysis": "", "position_actions": [], "buy_picks": [], "reasoning": []}
+
+    # Ensure required keys exist with correct types
+    plan.setdefault("market_analysis", "")
+    plan.setdefault("position_actions", [])
+    plan.setdefault("buy_picks", [])
+    plan.setdefault("reasoning", [])
+
+    # Validate position_actions is a list of dicts
+    if not isinstance(plan["position_actions"], list):
+        plan["position_actions"] = []
+    else:
+        plan["position_actions"] = [pa for pa in plan["position_actions"] if isinstance(pa, dict)]
+
+    # Validate buy_picks is a list of dicts
+    if not isinstance(plan["buy_picks"], list):
+        plan["buy_picks"] = []
+    else:
+        plan["buy_picks"] = [bp for bp in plan["buy_picks"] if isinstance(bp, dict)]
+
+    # Validate reasoning is a list of strings
+    if not isinstance(plan["reasoning"], list):
+        plan["reasoning"] = []
+
+    return plan
+
+
+def run_agent_cycle_with_fallback(db: Session, context: Dict[str, Any]) -> Dict[str, Any]:
+    """尝试运行 Agent 决策周期；失败时回退到 legacy 单次 AI 决策。"""
+    try:
+        plan = run_trading_agent_cycle(context)
+        plan = validate_final_trading_plan(plan)
+        add_realtime_log("info", "🧠 Agent 决策周期完成")
+        return plan
+    except Exception as e:
+        print(f"[agent] Agent cycle failed, falling back to legacy: {e}")
+        add_realtime_log("warning", f"⚠️ Agent 决策失败，回退到传统AI: {e}")
+        # Import the legacy function (it already exists in the file)
+        positions_ctx = context.get("positions", [])
+        candidates_ctx = context.get("candidates", context.get("candidate_pool", []))
+        account_info = context.get("account", {})
+        market_sentiment = context.get("market_snapshot", {})
+        return ai_comprehensive_decision(positions_ctx, candidates_ctx, account_info, market_sentiment)
 
 
 def calc_target_delta_amount(current_pct: float, target_pct: float, total_equity: float) -> float:
@@ -2096,8 +2145,20 @@ class AutonomousTradingEngine:
             "remaining_capacity": self.max_positions - len(remaining_positions),
         }
 
-        # ── 5. 调用 AI 综合决策 ──
-        decision = ai_comprehensive_decision(positions_ctx, candidates_ctx, account_info, market_sentiment)
+        # ── 5. 构建 Agent 上下文并运行决策 ──
+        agent_context = build_agent_cycle_context(
+            cycle_id=str(uuid.uuid4()),
+            timestamp=datetime.now().isoformat(),
+            account_info=account_info,
+            positions_ctx=positions_ctx,
+            candidates_ctx=candidates_ctx,
+            market_sentiment=market_sentiment,
+            engine_params={"max_positions": self.max_positions, "max_position_pct": self.max_position_pct},
+            recent_trades=[],
+            recent_decisions=[],
+            memory_summary={},
+        )
+        decision = run_agent_cycle_with_fallback(db, agent_context)
 
         market_analysis = decision.get("market_analysis", "")
         risk_level = decision.get("risk_level", "mid")

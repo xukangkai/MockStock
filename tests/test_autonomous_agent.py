@@ -287,3 +287,132 @@ def test_run_market_analysis_node_neutral(sample_context):
     assessment = result["market_assessment"]
     assert assessment["regime"] == "neutral"
     assert assessment["risk_bias"] == "balanced"
+
+
+# ═════════════════════════════════════════════════════
+#  validate_final_trading_plan tests
+# ═════════════════════════════════════════════════════
+
+def test_validate_final_trading_plan_valid_passes_through():
+    plan = {
+        "market_analysis": "市场震荡",
+        "position_actions": [{"symbol": "600000", "action": "hold"}],
+        "buy_picks": [{"symbol": "512880", "price": 1.25}],
+        "reasoning": ["防守为主"],
+    }
+    result = web_app.validate_final_trading_plan(plan)
+    assert result is plan
+    assert result["market_analysis"] == "市场震荡"
+    assert len(result["position_actions"]) == 1
+    assert len(result["buy_picks"]) == 1
+    assert result["reasoning"] == ["防守为主"]
+
+
+def test_validate_final_trading_plan_missing_keys_get_defaults():
+    plan = {}
+    result = web_app.validate_final_trading_plan(plan)
+    assert result["market_analysis"] == ""
+    assert result["position_actions"] == []
+    assert result["buy_picks"] == []
+    assert result["reasoning"] == []
+
+
+def test_validate_final_trading_plan_non_dict_returns_safe_empty():
+    for bad_input in [None, "string", 42, [1, 2, 3]]:
+        result = web_app.validate_final_trading_plan(bad_input)
+        assert result == {"market_analysis": "", "position_actions": [], "buy_picks": [], "reasoning": []}
+
+
+def test_validate_final_trading_plan_non_list_position_actions_coerced():
+    plan = {"position_actions": "not a list", "buy_picks": None, "reasoning": 99}
+    result = web_app.validate_final_trading_plan(plan)
+    assert result["position_actions"] == []
+    assert result["buy_picks"] == []
+    assert result["reasoning"] == []
+
+
+def test_validate_final_trading_plan_filters_non_dict_items_in_lists():
+    plan = {
+        "position_actions": [{"symbol": "600000", "action": "hold"}, "bad", 42, None],
+        "buy_picks": [{"symbol": "512880"}, "invalid", 3.14],
+    }
+    result = web_app.validate_final_trading_plan(plan)
+    assert len(result["position_actions"]) == 1
+    assert result["position_actions"][0]["symbol"] == "600000"
+    assert len(result["buy_picks"]) == 1
+    assert result["buy_picks"][0]["symbol"] == "512880"
+
+
+def test_validate_final_trading_plan_extra_keys_preserved():
+    plan = {
+        "market_analysis": "bull",
+        "position_actions": [],
+        "buy_picks": [],
+        "reasoning": [],
+        "confidence": 0.8,
+        "risk_level": "low",
+        "summary": "看多",
+    }
+    result = web_app.validate_final_trading_plan(plan)
+    assert result["confidence"] == 0.8
+    assert result["risk_level"] == "low"
+    assert result["summary"] == "看多"
+
+
+# ═════════════════════════════════════════════════════
+#  run_agent_cycle_with_fallback tests
+# ═════════════════════════════════════════════════════
+
+def test_run_agent_cycle_with_fallback_success_path(monkeypatch, db, sample_context):
+    expected_plan = {
+        "market_analysis": "Agent 分析完毕",
+        "position_actions": [{"symbol": "600000", "action": "hold", "target_pct": 15}],
+        "buy_picks": [],
+        "reasoning": ["防守模式"],
+        "risk_level": "medium",
+        "confidence": 0.7,
+    }
+    monkeypatch.setattr(web_app, "run_trading_agent_cycle", lambda ctx: expected_plan)
+
+    result = web_app.run_agent_cycle_with_fallback(db, sample_context)
+    assert result["market_analysis"] == "Agent 分析完毕"
+    assert result["position_actions"][0]["action"] == "hold"
+    assert result["risk_level"] == "medium"
+
+
+def test_run_agent_cycle_with_fallback_falls_back_on_agent_exception(monkeypatch, db, sample_context):
+    monkeypatch.setattr(web_app, "run_trading_agent_cycle", lambda ctx: (_ for _ in ()).throw(RuntimeError("agent boom")))
+    legacy_plan = {
+        "market_analysis": "传统AI分析",
+        "position_actions": [{"symbol": "600000", "action": "reduce", "target_pct": 10}],
+        "buy_picks": [],
+        "reasoning": ["回退决策"],
+    }
+    monkeypatch.setattr(web_app, "ai_comprehensive_decision", lambda *a, **kw: legacy_plan)
+
+    result = web_app.run_agent_cycle_with_fallback(db, sample_context)
+    assert result["market_analysis"] == "传统AI分析"
+    assert result["position_actions"][0]["action"] == "reduce"
+
+
+def test_run_agent_cycle_with_fallback_passes_correct_args_to_legacy(monkeypatch, db, sample_context):
+    """Verify that the fallback extracts the right context keys for the legacy function."""
+    captured = {}
+
+    def fake_agent_cycle(ctx):
+        raise ValueError("fail")
+
+    def fake_legacy(positions, candidates, account, market):
+        captured["positions"] = positions
+        captured["candidates"] = candidates
+        captured["account"] = account
+        captured["market"] = market
+        return {"market_analysis": "ok", "position_actions": [], "buy_picks": [], "reasoning": []}
+
+    monkeypatch.setattr(web_app, "run_trading_agent_cycle", fake_agent_cycle)
+    monkeypatch.setattr(web_app, "ai_comprehensive_decision", fake_legacy)
+
+    result = web_app.run_agent_cycle_with_fallback(db, sample_context)
+    assert captured["account"]["available_cash"] == 6200
+    assert captured["positions"][0]["symbol"] == "600000"
+    assert captured["market"]["sentiment"] == "neutral"
