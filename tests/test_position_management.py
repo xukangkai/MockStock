@@ -55,6 +55,21 @@ def test_normalize_position_action_accepts_known_actions():
     assert action == "reduce"
 
 
+def test_parse_ai_position_action_uses_target_pct():
+    item = {
+        "symbol": "000725",
+        "action": "add",
+        "target_pct": 35,
+        "change_pct": 10,
+        "reason": "趋势增强",
+        "confidence": 82,
+    }
+    parsed = web_app.parse_position_action(item)
+    assert parsed["action"] == "add"
+    assert parsed["target_pct"] == 35
+    assert parsed["change_pct"] == 10
+
+
 def test_allow_add_requires_non_loss_trend_signal():
     allowed = web_app.allow_add_action(
         pnl_pct=-3.5,

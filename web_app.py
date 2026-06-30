@@ -802,6 +802,20 @@ def normalize_position_action(item: Dict) -> str:
     return "hold"
 
 
+def parse_position_action(item: Dict) -> Dict:
+    action = normalize_position_action(item)
+    target_pct = float(item.get("target_pct", 0) or 0)
+    change_pct = float(item.get("change_pct", 0) or 0)
+    return {
+        "symbol": normalize_symbol(item.get("symbol", "")),
+        "action": action,
+        "target_pct": round(max(0.0, target_pct), 2),
+        "change_pct": round(change_pct, 2),
+        "reason": str(item.get("reason", ""))[:120],
+        "confidence": float(item.get("confidence", 0) or 0),
+    }
+
+
 def allow_add_action(pnl_pct: float, current_pct: float, target_pct: float,
                      max_position_pct: float, trend_ok: bool) -> bool:
     if not trend_ok:
@@ -1267,7 +1281,8 @@ def ai_comprehensive_decision(positions_ctx: List[Dict], candidates_ctx: List[Di
       "market_analysis": "...",
       "risk_level": "low/mid/high",
       "position_actions": [
-        {"symbol": "...", "action": "sell/hold", "reason": "...", "confidence": 0-100}
+        {"symbol": "...", "action": "add/hold/reduce/exit", "target_pct": 0, "change_pct": 0,
+         "reason": "...", "confidence": 0-100}
       ],
       "buy_picks": [
         {"symbol": "...", "name": "...", "reason": "...", "entry_price": 0,
@@ -1286,14 +1301,20 @@ def ai_comprehensive_decision(positions_ctx: List[Dict], candidates_ctx: List[Di
 - 最大持仓：{account_info['max_positions']}只，当前已持有：{account_info['current_positions']}只
 
 ## 你的任务（一次完成）
-1. **管理现有持仓**：对每只持仓决定「卖出」还是「继续持有」
-   - 止盈原则：盈利达12%或短线涨幅过大（连续大涨后缩量）可获利了结
+1. **管理现有持仓**：对每只持仓决定「加仓 / 持有 / 减仓 / 退出」
+   - 止盈原则：盈利达12%或短线涨幅过大（连续大涨后缩量）可部分减仓或退出
    - 止损原则：亏损达5%必须止损
    - 持有原则：趋势健康、未达止盈止损位则继续持有
-2. **开新仓**：在卖出后释放资金的基础上，决定是否买入新标的
-   - ⚠️ **关键**：如果某只持仓你决定卖出，就不要再买入同一只股票！
+2. **开新仓**：在持仓调整后释放资金的基础上，决定是否买入新标的
+   - ⚠️ **关键**：如果某只持仓你决定退出，就不要再买入同一只股票！
    - 只推荐买得起的标的（entry_price × 100 ≤ 可用现金）
    - 优先ETF（低价、分散风险），其次低价价值股
+
+## 持仓动作原则
+- 你的首要目标是吃住主升浪。
+- 盈利本身不是清仓理由，趋势破坏才是。
+- 对短线过热但趋势未坏的持仓优先使用 reduce，而不是 exit。
+- 只有趋势强化、仓位不高、且不是逆势补仓时才能使用 add。
 
 ## 市场情绪
 - 情绪状态: {market_sentiment.get('sentiment', '未知')}
@@ -1306,7 +1327,9 @@ def ai_comprehensive_decision(positions_ctx: List[Dict], candidates_ctx: List[Di
   "position_actions": [
     {{
       "symbol": "持仓股票代码",
-      "action": "sell" 或 "hold",
+      "action": "add" 或 "hold" 或 "reduce" 或 "exit",
+      "target_pct": 0,
+      "change_pct": 0,
       "reason": "决策理由（50字内）",
       "confidence": 60-95
     }}
@@ -1329,9 +1352,10 @@ def ai_comprehensive_decision(positions_ctx: List[Dict], candidates_ctx: List[Di
 ## 注意
 - 只输出JSON，不要其他文字
 - position_actions 必须覆盖所有持仓
+- 每个 position_action 都必须包含 target_pct 和 change_pct
 - buy_picks 最多3只，可为空数组
 - 不要推荐已在持仓中的股票
-- 卖出的股票不要再买回"""
+- exit 的股票不要再买回"""
 
     # 获取新闻
     add_realtime_log("info", "📰 正在获取最新财经新闻...")
@@ -1364,8 +1388,8 @@ def ai_comprehensive_decision(positions_ctx: List[Dict], candidates_ctx: List[Di
 ## 📰 最新财经新闻
 {json.dumps(news, ensure_ascii=False, indent=2)}
 
-请综合分析以上信息，一次完成：① 对每只持仓做出卖/持有决策 ② 决定是否开新仓。
-注意：卖出后的股票不要再买回。"""}
+请综合分析以上信息，一次完成：① 对每只持仓做出加仓/持有/减仓/退出决策 ② 决定是否开新仓。
+注意：退出后的股票不要再买回；每个持仓动作都要给出 target_pct 和 change_pct。"""}
     ]
 
     add_realtime_log("ai", "🤖 AI正在综合分析持仓+市场，决定买卖...")
