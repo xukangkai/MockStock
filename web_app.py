@@ -46,11 +46,52 @@ _picks_cache = {"data": [], "time": None}
 PICKS_CACHE_TTL = 300  # 缓存有效期 5 分钟
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 import numpy as np
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+try:
+    from langgraph.graph import END, StateGraph
+except ImportError:
+    END = "__end__"
+
+    class _CompiledStateGraph:
+        def __init__(self, entry_point, edges, nodes):
+            self.entry_point = entry_point
+            self.edges = edges
+            self.nodes = nodes
+
+        def invoke(self, state):
+            current = self.entry_point
+            result = dict(state)
+            while current and current != END:
+                updates = self.nodes[current](result) or {}
+                if updates:
+                    result.update(updates)
+                current = self.edges.get(current)
+            return result
+
+    class StateGraph:
+        def __init__(self, _state_type):
+            self.entry_point = None
+            self.edges = {}
+            self.nodes = {}
+
+        def add_node(self, name, func):
+            self.nodes[name] = func
+
+        def set_entry_point(self, name):
+            self.entry_point = name
+
+        def add_edge(self, source, target):
+            self.edges[source] = target
+
+        def compile(self):
+            return _CompiledStateGraph(self.entry_point, self.edges, self.nodes)
+
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import (Boolean, Column, Date, DateTime, Float, Integer,
@@ -908,6 +949,119 @@ def recall_recent_agent_memory(db: Session, limit: int = 5, memory_type: str = "
         })
 
     return {"items": items, "notes": notes[:5]}
+
+
+class TradingAgentState(TypedDict, total=False):
+    context: Dict[str, Any]
+    memory_summary: Dict[str, Any]
+    market_assessment: Dict[str, Any]
+    position_assessments: List[Dict[str, Any]]
+    candidate_assessments: List[Dict[str, Any]]
+    risk_review: Dict[str, Any]
+    final_plan: Dict[str, Any]
+
+
+
+def run_market_analysis_node(state: TradingAgentState) -> Dict[str, Any]:
+    context = state["context"]
+    snapshot = context.get("market_snapshot", {})
+    score = float(snapshot.get("score", 50) or 50)
+    regime = "bullish" if score >= 70 else "defensive" if score <= 45 else "neutral"
+    return {
+        "market_assessment": {
+            "regime": regime,
+            "sentiment_score": score,
+            "risk_bias": "aggressive" if score >= 70 else "conservative" if score <= 45 else "balanced",
+            "sector_focus": [],
+            "warnings": [],
+            "reasoning": snapshot.get("sentiment", "市场中性"),
+        }
+    }
+
+
+
+def run_position_review_node(state: TradingAgentState) -> Dict[str, Any]:
+    positions = []
+    for pos in state["context"].get("positions", []):
+        positions.append({
+            "symbol": pos["symbol"],
+            "action": "hold",
+            "target_pct": min(50.0, pos.get("target_pct", 20.0) or 20.0),
+            "confidence": 0.6,
+            "thesis": "等待 AI 细化",
+            "risks": [],
+            "supports": [],
+        })
+    return {"position_assessments": positions}
+
+
+
+def run_candidate_research_node(state: TradingAgentState) -> Dict[str, Any]:
+    return {"candidate_assessments": []}
+
+
+
+def run_risk_review_node(state: TradingAgentState) -> Dict[str, Any]:
+    return {
+        "risk_review": {
+            "overall_pass": True,
+            "risk_level": "medium",
+            "blocked_actions": [],
+            "adjustments": [],
+            "notes": [],
+        }
+    }
+
+
+
+def run_decision_synthesizer_node(state: TradingAgentState) -> Dict[str, Any]:
+    assessments = state.get("position_assessments", [])
+    final_plan = {
+        "cycle_id": state["context"]["cycle_id"],
+        "position_actions": [
+            {
+                "symbol": item["symbol"],
+                "action": item["action"],
+                "target_pct": item["target_pct"],
+            }
+            for item in assessments
+        ],
+        "new_entries": [],
+        "buy_picks": [],
+        "portfolio_bias": state.get("market_assessment", {}).get("risk_bias", "balanced"),
+        "cash_reserve_target": 0.35,
+        "summary": state.get("market_assessment", {}).get("reasoning", "Agent plan"),
+        "confidence": 0.6,
+        "risk_level": state.get("risk_review", {}).get("risk_level", "medium"),
+    }
+    return {"final_plan": final_plan}
+
+
+
+def build_trading_agent_graph():
+    graph = StateGraph(TradingAgentState)
+    graph.add_node("recall_memory", lambda state: {"memory_summary": state["context"].get("memory_summary", {})})
+    graph.add_node("analyze_market", run_market_analysis_node)
+    graph.add_node("review_positions", run_position_review_node)
+    graph.add_node("research_candidates", run_candidate_research_node)
+    graph.add_node("risk_review", run_risk_review_node)
+    graph.add_node("synthesize_decision", run_decision_synthesizer_node)
+
+    graph.set_entry_point("recall_memory")
+    graph.add_edge("recall_memory", "analyze_market")
+    graph.add_edge("analyze_market", "review_positions")
+    graph.add_edge("review_positions", "research_candidates")
+    graph.add_edge("research_candidates", "risk_review")
+    graph.add_edge("risk_review", "synthesize_decision")
+    graph.add_edge("synthesize_decision", END)
+    return graph.compile()
+
+
+
+def run_trading_agent_cycle(context: Dict[str, Any]) -> Dict[str, Any]:
+    graph = build_trading_agent_graph()
+    result = graph.invoke({"context": context})
+    return result["final_plan"]
 
 
 def calc_target_delta_amount(current_pct: float, target_pct: float, total_equity: float) -> float:

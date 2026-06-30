@@ -204,3 +204,59 @@ def test_recall_recent_agent_memory_handles_malformed_json_and_aggregates_notes(
     assert [item["tags"] for item in summary["items"]] == ["latest", "bad-json", "older"]
     assert summary["items"][1]["content"] == {}
     assert summary["notes"] == ["latest-a", "latest-b", "older-a", "older-b", "older-c"]
+
+
+def test_run_trading_agent_cycle_returns_valid_plan(sample_context, monkeypatch):
+    monkeypatch.setattr(web_app, "run_market_analysis_node", lambda state: {
+        "market_assessment": {
+            "regime": "defensive",
+            "sentiment_score": 48,
+            "risk_bias": "conservative",
+            "sector_focus": ["ETF"],
+            "warnings": ["高位分歧扩大"],
+            "reasoning": "防守优先",
+        }
+    })
+    monkeypatch.setattr(web_app, "run_position_review_node", lambda state: {
+        "position_assessments": [
+            {
+                "symbol": "600000",
+                "action": "hold",
+                "target_pct": 18,
+                "confidence": 0.72,
+                "thesis": "趋势未破",
+                "risks": [],
+                "supports": ["量能稳定"],
+            }
+        ]
+    })
+    monkeypatch.setattr(web_app, "run_candidate_research_node", lambda state: {
+        "candidate_assessments": []
+    })
+    monkeypatch.setattr(web_app, "run_risk_review_node", lambda state: {
+        "risk_review": {
+            "overall_pass": True,
+            "risk_level": "medium",
+            "blocked_actions": [],
+            "adjustments": [],
+            "notes": ["保留现金"],
+        }
+    })
+    monkeypatch.setattr(web_app, "run_decision_synthesizer_node", lambda state: {
+        "final_plan": {
+            "cycle_id": state["context"]["cycle_id"],
+            "position_actions": [{"symbol": "600000", "action": "hold", "target_pct": 18}],
+            "new_entries": [],
+            "buy_picks": [],
+            "portfolio_bias": "balanced",
+            "cash_reserve_target": 0.35,
+            "summary": "防守模式，继续持有",
+            "confidence": 0.74,
+            "risk_level": "medium",
+        }
+    })
+
+    plan = web_app.run_trading_agent_cycle(sample_context)
+    assert plan["portfolio_bias"] == "balanced"
+    assert plan["position_actions"][0]["action"] == "hold"
+    assert plan["risk_level"] == "medium"
