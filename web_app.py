@@ -218,6 +218,57 @@ class DecisionLogModel(Base):
     reason = Column(Text, default="")
     detail = Column(Text, default="")
 
+class AgentCycleLogModel(Base):
+    __tablename__ = "agent_cycle_logs"
+
+    id = Column(Integer, primary_key=True)
+    cycle_id = Column(String(64), unique=True, index=True, nullable=False)
+    time = Column(DateTime, default=datetime.now, index=True)
+    status = Column(String(16), default="success")
+    duration_ms = Column(Integer, default=0)
+    risk_level = Column(String(16), default="mid")
+    summary = Column(Text, default="")
+    triggered_trade = Column(Boolean, default=False)
+    plan_json = Column(Text, default="{}")
+
+class AgentNodeLogModel(Base):
+    __tablename__ = "agent_node_logs"
+
+    id = Column(Integer, primary_key=True)
+    cycle_id = Column(String(64), index=True, nullable=False)
+    node_name = Column(String(64), index=True, nullable=False)
+    time = Column(DateTime, default=datetime.now, index=True)
+    duration_ms = Column(Integer, default=0)
+    model_name = Column(String(128), default="")
+    tool_calls = Column(Text, default="[]")
+    input_summary = Column(Text, default="")
+    output_summary = Column(Text, default="")
+
+class AgentMemoryModel(Base):
+    __tablename__ = "agent_memories"
+
+    id = Column(Integer, primary_key=True)
+    memory_type = Column(String(32), index=True, nullable=False)
+    memory_date = Column(DateTime, default=datetime.now, index=True)
+    tags = Column(String(255), default="")
+    content_json = Column(Text, default="{}")
+    relevance_score = Column(Float, default=0.0)
+
+class AgentFeedbackModel(Base):
+    __tablename__ = "agent_feedback"
+
+    id = Column(Integer, primary_key=True)
+    cycle_id = Column(String(64), index=True, nullable=False)
+    symbol = Column(String(16), index=True, nullable=False)
+    action_type = Column(String(16), nullable=False)
+    feedback_date = Column(DateTime, default=datetime.now, index=True)
+    horizon_1d = Column(Float, default=0.0)
+    horizon_3d = Column(Float, default=0.0)
+    horizon_5d = Column(Float, default=0.0)
+    max_drawdown = Column(Float, default=0.0)
+    outcome_label = Column(String(32), default="pending")
+    notes = Column(Text, default="")
+
 Base.metadata.create_all(bind=engine)
 
 # 尝试补齐旧表字段（保护本地 MySQL 历史数据，不自动删表）

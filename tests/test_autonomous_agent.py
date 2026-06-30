@@ -69,3 +69,28 @@ def sample_context():
 
 def test_placeholder_agent_harness(sample_context):
     assert sample_context["account"]["available_cash"] == 6200
+
+
+def test_agent_tables_are_created(db):
+    inspector = inspect(db.bind)
+    tables = set(inspector.get_table_names())
+    assert "agent_cycle_logs" in tables
+    assert "agent_node_logs" in tables
+    assert "agent_memories" in tables
+    assert "agent_feedback" in tables
+
+
+def test_agent_memory_model_persists_json_content(db):
+    row = web_app.AgentMemoryModel(
+        memory_type="short_term",
+        memory_date=datetime(2026, 6, 30, 15, 1),
+        tags="defensive,bank",
+        content_json='{"notes": ["avoid chasing"]}',
+        relevance_score=0.8,
+    )
+    db.add(row)
+    db.commit()
+
+    saved = db.query(web_app.AgentMemoryModel).one()
+    assert saved.memory_type == "short_term"
+    assert "avoid chasing" in saved.content_json
