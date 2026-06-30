@@ -1071,11 +1071,94 @@ def validate_final_trading_plan(plan: Dict[str, Any]) -> Dict[str, Any]:
     return plan
 
 
+def log_agent_cycle(db: Session, cycle_id: str, context: Dict[str, Any], plan: Dict[str, Any]) -> None:
+    """将一次 Agent 决策周期写入 agent_cycles 表。"""
+    row = AgentCycleLogModel(
+        cycle_id=cycle_id,
+        status="success",
+        risk_level=plan.get("risk_level", "mid"),
+        summary=plan.get("summary", ""),
+        triggered_trade=bool(plan.get("position_actions") or plan.get("buy_picks")),
+        plan_json=json.dumps(plan, ensure_ascii=False),
+    )
+    db.add(row)
+
+
+def log_agent_node(db: Session, cycle_id: str, node_name: str, state: Dict[str, Any]) -> None:
+    """记录 Agent 单节点输入输出。"""
+    row = AgentNodeLogModel(
+        cycle_id=cycle_id,
+        node_name=node_name,
+        input_summary=json.dumps({k: v for k, v in state.items() if k != "memory_summary"}, ensure_ascii=False),
+        output_summary=json.dumps({k: v for k, v in state.items() if k not in ("context", "memory_summary")}, ensure_ascii=False),
+    )
+    db.add(row)
+
+
+def store_agent_memory(db: Session, scope: str, ref_date, title: str, content: dict, source: str = "agent") -> None:
+    """写入一条 Agent 记忆。"""
+    row = AgentMemoryModel(
+        memory_type=scope,
+        memory_date=ref_date,
+        tags=f"{source}:{title}" if title else source,
+        content_json=json.dumps(content, ensure_ascii=False),
+    )
+    db.add(row)
+
+
+def write_daily_reflection_memory(db: Session) -> None:
+    """日终总结：将当日 Agent 周期摘要写入 memory。"""
+    from datetime import date as _date, datetime as _dt
+    today_str = _date.today().isoformat()
+    today_start = _dt.combine(_date.today(), _dt.min.time())
+    today_end = _dt.combine(_date.today(), _dt.max.time())
+
+    # Get today's cycles
+    cycles = db.query(AgentCycleLogModel).filter(
+        AgentCycleLogModel.time >= today_start,
+        AgentCycleLogModel.time <= today_end,
+    ).order_by(AgentCycleLogModel.id).all()
+
+    if not cycles:
+        return
+
+    # Check if reflection already exists
+    existing = db.query(AgentMemoryModel).filter(
+        AgentMemoryModel.memory_type == "reflection",
+        AgentMemoryModel.memory_date >= today_start,
+        AgentMemoryModel.memory_date <= today_end,
+    ).first()
+    if existing:
+        return
+
+    actions_summary = []
+    for c in cycles:
+        try:
+            plan = json.loads(c.plan_json) if c.plan_json else {}
+            actions = plan.get("position_actions", [])
+            buys = plan.get("buy_picks", [])
+            if actions:
+                actions_summary.extend([f"{a.get('action', '?')} {a.get('symbol', '')}" for a in actions if isinstance(a, dict)])
+            if buys:
+                actions_summary.extend([f"buy {b.get('symbol', '')}" for b in buys if isinstance(b, dict)])
+        except Exception:
+            pass
+
+    summary = {
+        "cycle_count": len(cycles),
+        "actions": actions_summary[:20],
+    }
+    store_agent_memory(db, "reflection", today_start, f"日终总结-{today_str}", summary, source="agent_reflection")
+
+
 def run_agent_cycle_with_fallback(db: Session, context: Dict[str, Any]) -> Dict[str, Any]:
     """尝试运行 Agent 决策周期；失败时回退到 legacy 单次 AI 决策。"""
     try:
         plan = run_trading_agent_cycle(context)
         plan = validate_final_trading_plan(plan)
+        cycle_id = str(uuid.uuid4())
+        log_agent_cycle(db, cycle_id, context, plan)
+        db.commit()
         add_realtime_log("info", "🧠 Agent 决策周期完成")
         return plan
     except Exception as e:

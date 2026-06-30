@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 from sqlalchemy import create_engine, inspect
@@ -416,3 +416,129 @@ def test_run_agent_cycle_with_fallback_passes_correct_args_to_legacy(monkeypatch
     assert captured["account"]["available_cash"] == 6200
     assert captured["positions"][0]["symbol"] == "600000"
     assert captured["market"]["sentiment"] == "neutral"
+
+
+# ═════════════════════════════════════════════════════
+#  Cycle log & memory persistence tests (Task 6)
+# ═════════════════════════════════════════════════════
+
+def test_log_agent_cycle_persists_to_db(db):
+    cycle_id = str(uuid.uuid4())
+    context = {"account": {"available_cash": 5000}, "market_snapshot": {"sentiment": "neutral"}}
+    plan = {
+        "position_actions": [{"symbol": "600000", "action": "hold"}],
+        "buy_picks": [],
+        "reasoning": ["防守"],
+        "risk_level": "medium",
+        "summary": "继续持有",
+    }
+    web_app.log_agent_cycle(db, cycle_id, context, plan)
+    db.commit()
+
+    saved = db.query(web_app.AgentCycleLogModel).filter_by(cycle_id=cycle_id).one()
+    assert saved.status == "success"
+    assert saved.risk_level == "medium"
+    assert saved.summary == "继续持有"
+    assert saved.triggered_trade is True
+    parsed = json.loads(saved.plan_json)
+    assert parsed["position_actions"][0]["symbol"] == "600000"
+
+
+def test_log_agent_node_persists_to_db(db):
+    cycle_id = str(uuid.uuid4())
+    state = {
+        "context": {"cycle_id": cycle_id},
+        "market_assessment": {"regime": "bullish"},
+        "memory_summary": {"notes": ["skip"]},
+    }
+    web_app.log_agent_node(db, cycle_id, "analyze_market", state)
+    db.commit()
+
+    saved = db.query(web_app.AgentNodeLogModel).filter_by(cycle_id=cycle_id, node_name="analyze_market").one()
+    assert saved.node_name == "analyze_market"
+    # input_summary should NOT contain memory_summary
+    input_data = json.loads(saved.input_summary)
+    assert "memory_summary" not in input_data
+    # output_summary should NOT contain context or memory_summary
+    output_data = json.loads(saved.output_summary)
+    assert "context" not in output_data
+    assert "memory_summary" not in output_data
+    assert "market_assessment" in output_data
+
+
+def test_store_agent_memory_persists_to_db(db):
+    ref_date = datetime(2026, 6, 30, 15, 0)
+    content = {"lesson": "避免追高", "confidence": 0.9}
+    web_app.store_agent_memory(db, "short_term", ref_date, "追高教训", content, source="agent_review")
+    db.commit()
+
+    saved = db.query(web_app.AgentMemoryModel).filter_by(memory_type="short_term").one()
+    assert saved.tags == "agent_review:追高教训"
+    parsed = json.loads(saved.content_json)
+    assert parsed["lesson"] == "避免追高"
+    assert parsed["confidence"] == 0.9
+
+
+def test_write_daily_reflection_memory_creates_note(db):
+    # Insert a fake cycle log for today
+    cycle = web_app.AgentCycleLogModel(
+        cycle_id=str(uuid.uuid4()),
+        status="success",
+        risk_level="medium",
+        summary="hold 600000",
+        triggered_trade=True,
+        plan_json=json.dumps({
+            "position_actions": [{"symbol": "600000", "action": "hold"}],
+            "buy_picks": [{"symbol": "512880"}],
+        }, ensure_ascii=False),
+    )
+    db.add(cycle)
+    db.commit()
+
+    web_app.write_daily_reflection_memory(db)
+    db.commit()
+
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_end = datetime.combine(date.today(), datetime.max.time())
+    reflection = db.query(web_app.AgentMemoryModel).filter(
+        web_app.AgentMemoryModel.memory_type == "reflection",
+        web_app.AgentMemoryModel.memory_date >= today_start,
+        web_app.AgentMemoryModel.memory_date <= today_end,
+    ).one()
+    assert "日终总结" in reflection.tags
+    parsed = json.loads(reflection.content_json)
+    assert parsed["cycle_count"] == 1
+    assert any("600000" in a for a in parsed["actions"])
+    assert any("512880" in a for a in parsed["actions"])
+
+
+def test_write_daily_reflection_memory_skips_if_exists(db):
+    # Pre-create a reflection for today
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    db.add(web_app.AgentMemoryModel(
+        memory_type="reflection",
+        memory_date=today_start,
+        tags="existing",
+        content_json='{"cycle_count": 0}',
+    ))
+    db.commit()
+
+    # Also add a cycle so it would normally create one
+    db.add(web_app.AgentCycleLogModel(
+        cycle_id=str(uuid.uuid4()),
+        plan_json='{"position_actions": []}',
+    ))
+    db.commit()
+
+    # Should not create a duplicate
+    web_app.write_daily_reflection_memory(db)
+    db.commit()
+
+    today_end = datetime.combine(date.today(), datetime.max.time())
+    reflections = db.query(web_app.AgentMemoryModel).filter(
+        web_app.AgentMemoryModel.memory_type == "reflection",
+        web_app.AgentMemoryModel.memory_date >= today_start,
+        web_app.AgentMemoryModel.memory_date <= today_end,
+    ).all()
+    assert len(reflections) == 1
+    assert reflections[0].tags == "existing"
