@@ -1,0 +1,227 @@
+/* ═══ 交易仓鼠宠物 ═══ */
+
+/* 仓鼠容器 - 固定右下角（可拖动） */
+.pet-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: filter 0.2s;
+}
+.pet-container.dragging {
+  cursor: grabbing;
+  filter: drop-shadow(0 4px 12px rgba(96,165,250,0.4));
+}
+
+/* 仓鼠主体 */
+.pet-hamster {
+  width: 100px;
+  height: 100px;
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: bottom center;
+}
+
+/* 胖瘦缩放 */
+.pet-hamster.fat { transform: scale(1.2); }
+.pet-hamster.normal { transform: scale(1); }
+.pet-hamster.thin { transform: scale(0.85); }
+.pet-hamster.very-thin { transform: scale(0.7); }
+.pet-hamster.very-fat { transform: scale(1.35); }
+
+/* 闲置呼吸动画 */
+@keyframes pet-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.02); }
+}
+.pet-hamster.idle {
+  animation: pet-breathe 3s ease-in-out infinite;
+}
+
+/* 开心弹跳 */
+@keyframes pet-bounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  30% { transform: translateY(-15px) scale(1.05); }
+  60% { transform: translateY(-5px) scale(0.98); }
+}
+.pet-hamster.bouncing {
+  animation: pet-bounce 0.8s ease-in-out infinite;
+}
+
+/* 生气抖动 */
+@keyframes pet-shake {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  20% { transform: translateX(-3px) rotate(-2deg); }
+  40% { transform: translateX(3px) rotate(2deg); }
+  60% { transform: translateX(-2px) rotate(-1deg); }
+  80% { transform: translateX(2px) rotate(1deg); }
+}
+.pet-hamster.shaking {
+  animation: pet-shake 0.5s ease-in-out infinite;
+}
+
+/* 打瞌睡 */
+@keyframes pet-sleep {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(2px) rotate(3deg); }
+}
+.pet-hamster.sleeping {
+  animation: pet-sleep 2s ease-in-out infinite;
+}
+
+/* 吃瓜子 - 左右晃 */
+@keyframes pet-eat {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-5deg); }
+  75% { transform: rotate(5deg); }
+}
+.pet-hamster.eating {
+  animation: pet-eat 0.6s ease-in-out infinite;
+}
+
+/* 举哑铃 - 上下 */
+@keyframes pet-exercise {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.pet-hamster.exercising {
+  animation: pet-exercise 0.8s ease-in-out infinite;
+}
+
+/* 洗澡 - 旋转 */
+@keyframes pet-bath {
+  0% { transform: rotate(0deg); }
+  25% { transform: rotate(10deg); }
+  50% { transform: rotate(0deg); }
+  75% { transform: rotate(-10deg); }
+  100% { transform: rotate(0deg); }
+}
+.pet-hamster.bathing {
+  animation: pet-bath 1.2s ease-in-out infinite;
+}
+
+/* 看K线 - 微抖 */
+@keyframes pet-read {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(2px); }
+}
+.pet-hamster.reading {
+  animation: pet-read 1.5s ease-in-out infinite;
+}
+
+/* 气泡文字 */
+.pet-bubble {
+  position: absolute;
+  bottom: 105px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e1e3a;
+  color: #e2e8f0;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  white-space: nowrap;
+  border: 1px solid #2a2a4a;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.pet-bubble.show {
+  opacity: 1;
+}
+.pet-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #1e1e3a;
+}
+
+/* 等级标签 */
+.pet-level {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.pet-level.lv-normal { background: #374151; color: #9ca3af; }
+.pet-level.lv-gold { background: #92400e; color: #fbbf24; }
+.pet-level.lv-fire { background: #7f1d1d; color: #f87171; }
+.pet-level.lv-diamond { background: #1e3a5f; color: #60a5fa; }
+
+/* 详情面板 */
+.pet-detail {
+  position: absolute;
+  bottom: 120px;
+  right: 0;
+  width: 260px;
+  background: #0f0f23;
+  border: 1px solid #2a2a4a;
+  border-radius: 12px;
+  padding: 16px;
+  display: none;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.pet-detail.show { display: block; }
+
+.pet-detail h4 {
+  color: #60a5fa;
+  font-size: 13px;
+  margin: 0 0 8px 0;
+}
+.pet-detail .stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid #1a1a2e;
+}
+.pet-detail .stat-label { color: #64748b; }
+.pet-detail .stat-value { color: #e2e8f0; font-weight: 600; }
+.pet-detail .stat-value.positive { color: #4ade80; }
+.pet-detail .stat-value.negative { color: #ef4444; }
+
+/* 装备进度条 */
+.pet-equip-progress {
+  margin-top: 12px;
+}
+.pet-equip-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  padding: 4px 0;
+}
+.pet-equip-item .equip-icon { font-size: 16px; }
+.pet-equip-item .equip-name { color: #94a3b8; flex: 1; }
+.pet-equip-item .equip-status {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.pet-equip-item .equip-locked { background: #1e1e3a; color: #475569; }
+.pet-equip-item .equip-unlocked { background: #1e3a5f; color: #60a5fa; }
+
+/* 进度条 */
+.pet-progress-bar {
+  height: 3px;
+  background: #1a1a2e;
+  border-radius: 2px;
+  margin-top: 2px;
+  overflow: hidden;
+}
+.pet-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}

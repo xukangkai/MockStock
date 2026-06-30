@@ -1,0 +1,9 @@
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+sqlalchemy>=2.0.0
+python-dotenv>=1.0.0
+python-multipart>=0.0.6
+akshare>=1.10.0
+pandas>=2.0.0
+numpy>=1.24.0
+pymysql>=1.1.0  # 仅 MySQL 需要，SQLite 用户可删除此行
