@@ -133,3 +133,23 @@ def test_cap_target_pct_respects_max_position_limit():
 def test_cap_target_pct_keeps_lower_value():
     capped = web_app.cap_target_pct(target_pct=35, max_position_pct=50)
     assert capped == 35
+
+
+def test_parse_unknown_action_falls_back_to_hold():
+    parsed = web_app.parse_position_action({"symbol": "000725", "action": "strange"})
+    assert parsed["action"] == "hold"
+
+
+def test_allow_add_rejects_target_over_limit():
+    allowed = web_app.allow_add_action(
+        pnl_pct=6.0,
+        current_pct=30.0,
+        target_pct=55.0,
+        max_position_pct=50.0,
+        trend_ok=True,
+    )
+    assert allowed is False
+
+
+def test_should_force_exit_allows_hold_when_profitable_and_trend_not_broken():
+    assert web_app.should_force_exit(pnl_pct=14.0, stop_loss_pct=5.0, trend_broken=False) is False
