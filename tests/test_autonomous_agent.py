@@ -106,3 +106,47 @@ def test_agent_memory_model_round_trips_json_content(db):
     assert saved.memory_type == "short_term"
     assert json.loads(saved.content_json) == payload
     assert json.loads(saved.content_json)["notes"] == ["avoid chasing", "wait for pullback"]
+
+
+def test_build_agent_cycle_context_keeps_core_sections(sample_context):
+    context = web_app.build_agent_cycle_context(
+        cycle_id=sample_context["cycle_id"],
+        timestamp=sample_context["timestamp"],
+        account_info=sample_context["account"],
+        positions_ctx=sample_context["positions"],
+        candidates_ctx=sample_context["candidate_pool"],
+        market_sentiment=sample_context["market_snapshot"],
+        engine_params=sample_context["engine_params"],
+        recent_trades=[],
+        recent_decisions=[],
+        memory_summary={"notes": ["avoid chasing"]},
+    )
+    assert context["account"]["available_cash"] == 6200
+    assert context["positions"][0]["symbol"] == "600000"
+    assert context["memory_summary"]["notes"] == ["avoid chasing"]
+
+
+def test_recall_recent_agent_memory_prefers_latest_rows(db):
+    db.add(
+        web_app.AgentMemoryModel(
+            memory_type="short_term",
+            memory_date=datetime(2026, 6, 28, 15, 0),
+            tags="bullish,bank",
+            content_json='{"notes": ["older"]}',
+            relevance_score=0.3,
+        )
+    )
+    db.add(
+        web_app.AgentMemoryModel(
+            memory_type="short_term",
+            memory_date=datetime(2026, 6, 30, 15, 0),
+            tags="defensive,etf",
+            content_json='{"notes": ["latest"]}',
+            relevance_score=0.9,
+        )
+    )
+    db.commit()
+
+    summary = web_app.recall_recent_agent_memory(db, limit=1)
+    assert summary["items"][0]["tags"] == "defensive,etf"
+    assert summary["notes"] == ["latest"]

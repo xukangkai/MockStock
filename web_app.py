@@ -844,6 +844,57 @@ def cap_target_pct(target_pct: float, max_position_pct: float) -> float:
     return round(max(0.0, min(target_pct, max_position_pct)), 2)
 
 
+def safe_json_loads(raw: str, default):
+    try:
+        return json.loads(raw) if raw else default
+    except Exception:
+        return default
+
+
+# ═════════════════════════════════════════════════════
+#  Agent 上下文与记忆辅助函数
+# ═════════════════════════════════════════════════════
+def build_agent_cycle_context(cycle_id: str, timestamp: str, account_info: Dict,
+                              positions_ctx: List[Dict], candidates_ctx: List[Dict],
+                              market_sentiment: Dict, engine_params: Dict,
+                              recent_trades: List[Dict], recent_decisions: List[Dict],
+                              memory_summary: Dict) -> Dict:
+    return {
+        "cycle_id": cycle_id,
+        "timestamp": timestamp,
+        "account": account_info,
+        "positions": positions_ctx,
+        "candidate_pool": candidates_ctx,
+        "market_snapshot": market_sentiment,
+        "engine_params": engine_params,
+        "recent_trades": recent_trades,
+        "recent_decisions": recent_decisions,
+        "memory_summary": memory_summary or {"items": [], "notes": []},
+    }
+
+
+def recall_recent_agent_memory(db: Session, limit: int = 5, memory_type: str = "short_term") -> Dict:
+    rows = db.query(AgentMemoryModel).filter(
+        AgentMemoryModel.memory_type == memory_type
+    ).order_by(AgentMemoryModel.memory_date.desc()).limit(limit).all()
+
+    items = []
+    notes = []
+    for row in rows:
+        payload = safe_json_loads(row.content_json, {})
+        items.append({
+            "id": row.id,
+            "memory_type": row.memory_type,
+            "memory_date": row.memory_date.isoformat() if row.memory_date else "",
+            "tags": row.tags,
+            "content": payload,
+            "relevance_score": row.relevance_score,
+        })
+        notes.extend(payload.get("notes", []))
+
+    return {"items": items, "notes": notes[:5]}
+
+
 def calc_target_delta_amount(current_pct: float, target_pct: float, total_equity: float) -> float:
     if total_equity <= 0:
         return 0.0
