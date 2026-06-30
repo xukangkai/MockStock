@@ -789,6 +789,10 @@ def calc_position_pct(market_value: float, total_equity: float) -> float:
     return round(market_value / total_equity * 100, 2)
 
 
+def cap_target_pct(target_pct: float, max_position_pct: float) -> float:
+    return round(max(0.0, min(target_pct, max_position_pct)), 2)
+
+
 def calc_target_delta_amount(current_pct: float, target_pct: float, total_equity: float) -> float:
     if total_equity <= 0:
         return 0.0
@@ -1851,6 +1855,7 @@ class AutonomousTradingEngine:
         position_actions = decision.get("position_actions", [])
         for pa in position_actions:
             parsed = parse_position_action(pa)
+            parsed["target_pct"] = cap_target_pct(parsed["target_pct"], self.max_position_pct)
             sym = parsed["symbol"]
             action = parsed["action"]
             reason = parsed["reason"]
@@ -1884,6 +1889,9 @@ class AutonomousTradingEngine:
                     print(f"[AI] 退出 {sym} {avails}股 @ {price} {reason[:80]}")
             elif action == "reduce":
                 delta_amount = calc_target_delta_amount(current_pct, target_pct, total_equity)
+                if abs(delta_amount) < price * LOT_SIZE:
+                    log_decision(db, "skip", sym, pos.name, price, score=confidence, reason="目标仓位变化不足一手")
+                    continue
                 qty = calc_trade_qty_from_delta(delta_amount, price)
                 qty = round_lot(min(qty, avails))
                 if qty <= 0:
@@ -1899,6 +1907,9 @@ class AutonomousTradingEngine:
                     print(f"[AI] 减仓 {sym} {qty}股 @ {price} {reason[:80]}")
             elif action == "add":
                 delta_amount = calc_target_delta_amount(current_pct, target_pct, total_equity)
+                if abs(delta_amount) < price * LOT_SIZE:
+                    log_decision(db, "skip", sym, pos.name, price, score=confidence, reason="目标仓位变化不足一手")
+                    continue
                 qty = calc_trade_qty_from_delta(delta_amount, price)
                 if qty <= 0:
                     log_decision(db, "skip", sym, pos.name, price, score=confidence, reason="目标仓位变化不足一手")

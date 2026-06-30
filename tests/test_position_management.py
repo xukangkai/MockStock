@@ -123,3 +123,13 @@ def test_calc_trade_qty_for_add_uses_target_delta():
 def test_calc_trade_qty_returns_zero_for_small_delta():
     qty = web_app.calc_trade_qty_from_delta(delta_amount=200, price=5.0)
     assert qty == 0
+
+
+def test_cap_target_pct_respects_max_position_limit():
+    capped = web_app.cap_target_pct(target_pct=65, max_position_pct=50)
+    assert capped == 50
+
+
+def test_cap_target_pct_keeps_lower_value():
+    capped = web_app.cap_target_pct(target_pct=35, max_position_pct=50)
+    assert capped == 35
