@@ -33,6 +33,11 @@ const PetWidget = (() => {
     lifeExprMax: 50000,      // 生活表情最大间隔 50秒
     lifeExprDuration: 5000,  // 生活表情持续 5秒
     chatterInterval: 5000,   // 碎碎念间隔 5秒
+    // 行为系统
+    actionMinInterval: 3000,   // 最短行为间隔 3秒
+    actionMaxInterval: 7000,   // 最长行为间隔 7秒
+    walkStepPx: 80,            // 行走步距
+    runStepPx: 200,            // 跑步步距
   };
 
   // ── 状态 ──
@@ -60,12 +65,16 @@ const PetWidget = (() => {
     dragOffsetX: 0,
     dragOffsetY: 0,
     hasMoved: false,
+    // 行为状态
+    currentAction: null,   // 当前动作: walk, run, jump, spin, tumble, dashing, wiggling
+    actionInProgress: false,
   };
 
   let fetchTimer = null;
   let lifeTimer = null;
   let bubbleTimer = null;
   let chatterTimer = null;
+  let actionTimer = null;
 
   // ── SVG 仓鼠绘制 ──
   function buildSvgHamster(level, expr, lifeExpr, equipIds) {
@@ -128,15 +137,127 @@ const PetWidget = (() => {
 
       <!-- 生活表情附加元素 -->
       ${renderLifeExprExtras(lifeExpr, lv)}
+      <!-- 行为动作附加元素 -->
+      ${renderActionExtras(lv)}
     </svg>`;
   }
 
   function getExpression(expr, lifeExpr) {
-    // 生活表情优先（如果有）
+    // 行为表情优先
+    if (state.currentAction) {
+      const actionExpr = getActionExpression(state.currentAction);
+      if (actionExpr) return actionExpr;
+    }
+    // 生活表情
     if (lifeExpr) {
       return getLifeExpression(lifeExpr);
     }
     return getMoodExpression(expr);
+  }
+
+  function getActionExpression(action) {
+    switch (action) {
+      case 'singing':
+        return {
+          eyes: `
+            <path d="M65 82 Q72 74 79 82" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M121 82 Q128 74 135 82" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round"/>`,
+          mouth: `<ellipse cx="100" cy="108" rx="5" ry="6" fill="#92400e" opacity="0.8"/>`,
+          cheeks: `
+            <circle cx="60" cy="96" r="11" fill="#fda4af" opacity="0.6"/>
+            <circle cx="140" cy="96" r="11" fill="#fda4af" opacity="0.6"/>`,
+        };
+      case 'eat-ready':
+        return {
+          eyes: `
+            <ellipse cx="72" cy="82" rx="8" ry="9" fill="#92400e"/>
+            <ellipse cx="72" cy="79" rx="3.5" ry="4" fill="#fff"/>
+            <ellipse cx="128" cy="82" rx="8" ry="9" fill="#92400e"/>
+            <ellipse cx="128" cy="79" rx="3.5" ry="4" fill="#fff"/>`,
+          mouth: `<path d="M90 106 Q100 112 110 106" fill="none" stroke="#92400e" stroke-width="2" stroke-linecap="round"/>`,
+          cheeks: `
+            <circle cx="60" cy="96" r="10" fill="#fda4af" opacity="0.5"/>
+            <circle cx="140" cy="96" r="10" fill="#fda4af" opacity="0.5"/>`,
+        };
+      case 'eat-chew':
+        return {
+          eyes: `
+            <path d="M65 82 Q72 76 79 82" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M121 82 Q128 76 135 82" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round"/>`,
+          mouth: `<circle cx="100" cy="107" r="5" fill="#92400e" opacity="0.8"/>`,
+          cheeks: `
+            <circle cx="56" cy="96" r="14" fill="${CONFIG.levels[state.currentLevel].bellyColor}" opacity="0.6"/>
+            <circle cx="144" cy="96" r="14" fill="${CONFIG.levels[state.currentLevel].bellyColor}" opacity="0.6"/>`,
+        };
+      case 'eat-satisfied':
+        return {
+          eyes: `
+            <path d="M65 82 Q72 74 79 82" fill="none" stroke="#92400e" stroke-width="3" stroke-linecap="round"/>
+            <path d="M121 82 Q128 74 135 82" fill="none" stroke="#92400e" stroke-width="3" stroke-linecap="round"/>`,
+          mouth: `<path d="M88 105 Q100 116 112 105" fill="${CONFIG.levels[state.currentLevel].bellyColor}" stroke="#92400e" stroke-width="2" stroke-linecap="round"/>`,
+          cheeks: `
+            <circle cx="60" cy="98" r="12" fill="#fda4af" opacity="0.7"/>
+            <circle cx="140" cy="98" r="12" fill="#fda4af" opacity="0.7"/>`,
+        };
+      case 'fall-asleep':
+        return {
+          eyes: `
+            <path d="M65 84 Q72 82 79 84" fill="none" stroke="#92400e" stroke-width="2" stroke-linecap="round"/>
+            <path d="M121 84 Q128 82 135 84" fill="none" stroke="#92400e" stroke-width="2" stroke-linecap="round"/>`,
+          mouth: `<path d="M92 106 Q100 110 108 106" fill="none" stroke="#92400e" stroke-width="2" stroke-linecap="round"/>`,
+          cheeks: `
+            <circle cx="60" cy="96" r="10" fill="#fda4af" opacity="0.3"/>
+            <circle cx="140" cy="96" r="10" fill="#fda4af" opacity="0.3"/>`,
+        };
+      case 'deep-sleep':
+        return {
+          eyes: `
+            <path d="M65 84 Q72 80 79 84" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M121 84 Q128 80 135 84" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round"/>`,
+          mouth: `<path d="M92 106 Q100 110 108 106" fill="none" stroke="#92400e" stroke-width="2" stroke-linecap="round"/>`,
+          cheeks: `
+            <circle cx="60" cy="96" r="10" fill="#fda4af" opacity="0.3"/>
+            <circle cx="140" cy="96" r="10" fill="#fda4af" opacity="0.3"/>`,
+        };
+      case 'wake-up':
+        return {
+          eyes: `
+            <ellipse cx="72" cy="82" rx="8" ry="9" fill="#92400e"/>
+            <ellipse cx="72" cy="79" rx="3.5" ry="4" fill="#fff"/>
+            <ellipse cx="128" cy="82" rx="8" ry="9" fill="#92400e"/>
+            <ellipse cx="128" cy="79" rx="3.5" ry="4" fill="#fff"/>`,
+          mouth: `<path d="M92 104 Q100 108 108 104" fill="none" stroke="#92400e" stroke-width="2" stroke-linecap="round"/>`,
+          cheeks: `
+            <circle cx="60" cy="96" r="9" fill="#fda4af" opacity="0.4"/>
+            <circle cx="140" cy="96" r="9" fill="#fda4af" opacity="0.4"/>`,
+        };
+      case 'dance-disco':
+      case 'dance-ballet':
+      case 'dance-robot':
+        return {
+          eyes: `
+            <path d="M65 82 Q72 74 79 82" fill="none" stroke="#92400e" stroke-width="3" stroke-linecap="round"/>
+            <path d="M121 82 Q128 74 135 82" fill="none" stroke="#92400e" stroke-width="3" stroke-linecap="round"/>`,
+          mouth: `<path d="M85 105 Q100 116 115 105" fill="${CONFIG.levels[state.currentLevel].bellyColor}" stroke="#92400e" stroke-width="2" stroke-linecap="round"/>`,
+          cheeks: `
+            <circle cx="60" cy="98" r="11" fill="#fda4af" opacity="0.6"/>
+            <circle cx="140" cy="98" r="11" fill="#fda4af" opacity="0.6"/>`,
+        };
+      case 'jumprope':
+        return {
+          eyes: `
+            <ellipse cx="72" cy="82" rx="6" ry="7" fill="#92400e"/>
+            <ellipse cx="72" cy="80" rx="2.5" ry="3" fill="#fff"/>
+            <ellipse cx="128" cy="82" rx="6" ry="7" fill="#92400e"/>
+            <ellipse cx="128" cy="80" rx="2.5" ry="3" fill="#fff"/>`,
+          mouth: `<path d="M90 105 Q100 110 110 105" fill="none" stroke="#92400e" stroke-width="2" stroke-linecap="round"/>`,
+          cheeks: `
+            <circle cx="60" cy="96" r="10" fill="#fda4af" opacity="0.5"/>
+            <circle cx="140" cy="96" r="10" fill="#fda4af" opacity="0.5"/>`,
+        };
+      default:
+        return null;
+    }
   }
 
   function getMoodExpression(expr) {
@@ -308,6 +429,60 @@ const PetWidget = (() => {
     }
   }
 
+  // 行为动作的 SVG 附加元素
+  function renderActionExtras(lv) {
+    const a = state.currentAction;
+    if (!a) return '';
+    switch (a) {
+      case 'singing':
+        return `
+          <text x="40" y="60" font-size="16" fill="#f472b6" opacity="0.9">♪</text>
+          <text x="150" y="50" font-size="14" fill="#a78bfa" opacity="0.8">♫</text>
+          <text x="30" y="40" font-size="12" fill="#fb923c" opacity="0.7">♪</text>
+          <text x="160" y="35" font-size="18" fill="#f472b6" opacity="0.6">♬</text>`;
+      case 'jumprope':
+        return `
+          <line x1="30" y1="170" x2="170" y2="170" stroke="${lv.earColor}" stroke-width="2.5" opacity="0.7" stroke-linecap="round"/>
+          <circle cx="30" cy="170" r="4" fill="${lv.earColor}" opacity="0.8"/>
+          <circle cx="170" cy="170" r="4" fill="${lv.earColor}" opacity="0.8"/>`;
+      case 'eat-ready':
+        return `<text x="130" y="140" font-size="16">🌻</text>`;
+      case 'eat-chew':
+        return `
+          <text x="130" y="130" font-size="14">🌻</text>
+          <text x="85" y="115" font-size="10" fill="#92400e" opacity="0.6">✦</text>
+          <text x="115" y="112" font-size="8" fill="#92400e" opacity="0.4">✦</text>`;
+      case 'eat-satisfied':
+        return `
+          <text x="72" y="72" font-size="10" fill="#f472b6">♡</text>
+          <text x="122" y="72" font-size="10" fill="#f472b6">♡</text>`;
+      case 'fall-asleep':
+        return `<text x="150" y="58" font-size="12" fill="#94a3b8" opacity="0.5">z</text>`;
+      case 'deep-sleep':
+        return `
+          <text x="150" y="58" font-size="16" fill="#94a3b8" font-weight="bold" opacity="0.7">Z</text>
+          <text x="162" y="44" font-size="12" fill="#94a3b8" font-weight="bold" opacity="0.5">z</text>
+          <text x="170" y="33" font-size="9" fill="#94a3b8" font-weight="bold" opacity="0.3">z</text>`;
+      case 'wake-up':
+        return `<text x="100" y="68" font-size="14" fill="#fbbf24">☀</text>`;
+      case 'dance-disco':
+        return `
+          <text x="25" y="55" font-size="14" fill="#f472b6" opacity="0.8">✦</text>
+          <text x="165" y="45" font-size="12" fill="#a78bfa" opacity="0.7">✦</text>
+          <text x="155" y="70" font-size="10" fill="#60a5fa" opacity="0.6">✦</text>`;
+      case 'dance-ballet':
+        return `
+          <text x="25" y="50" font-size="12" fill="#f9a8d4" opacity="0.7">✿</text>
+          <text x="165" y="45" font-size="12" fill="#f9a8d4" opacity="0.7">✿</text>`;
+      case 'dance-robot':
+        return `
+          <text x="150" y="55" font-size="10" fill="#60a5fa" opacity="0.8">01</text>
+          <text x="155" y="45" font-size="8" fill="#60a5fa" opacity="0.5">10</text>`;
+      default:
+        return '';
+    }
+  }
+
   function renderEquipment(equipIds, lv) {
     let svg = '';
     if (equipIds.includes('hat')) {
@@ -376,6 +551,22 @@ const PetWidget = (() => {
   }
 
   function getAnimClass(expr, lifeExpr) {
+    // 行为动画优先（JS动作名 → CSS class 映射）
+    if (state.currentAction) {
+      const actionClassMap = {
+        walk: 'walking', run: 'running', jump: 'jumping',
+        spin: 'spinning', tumble: 'tumbling',
+        dashing: 'dashing', wiggling: 'wiggling', shaking: 'shaking',
+        jumprope: 'jumprope',
+        'run-circle-right': 'run-circle-right', 'run-circle-left': 'run-circle-left',
+        singing: 'singing',
+        'dance-disco': 'dance-disco', 'dance-ballet': 'dance-ballet', 'dance-robot': 'dance-robot',
+        'eat-ready': 'eat-ready', 'eat-chew': 'eat-chew', 'eat-satisfied': 'eat-satisfied',
+        'fall-asleep': 'fall-asleep', 'deep-sleep': 'deep-sleep', 'wake-up': 'wake-up',
+      };
+      return actionClassMap[state.currentAction] || state.currentAction;
+    }
+
     if (lifeExpr) {
       switch (lifeExpr) {
         case 'sleeping': return 'sleeping';
@@ -386,7 +577,7 @@ const PetWidget = (() => {
       }
     }
     switch (expr) {
-      case 'ecstatic': return 'bouncing';
+      case 'ecstatic': return 'bouncing-joy';
       case 'happy': return 'bouncing';
       case 'angry': return 'shaking';
       case 'furious': return 'shaking';
@@ -406,6 +597,21 @@ const PetWidget = (() => {
     exercising: ['妈的举铁！', '操！变强！', '他妈的加油！', '靠一二一！'],
     bathing: ['妈的舒服~', '卧槽洗白白', '他妈的搓搓', '靠香喷喷'],
     reading: ['妈的看K线...', '卧槽这阳线！', '他妈的分析中', '靠看盘...'],
+    walk: ['溜达溜达...', '妈的散步', '卧槽逛逛', '他妈的转转~'],
+    run: ['冲啊！！', '妈的快跑！', '卧槽冲冲冲！', '加速加速！'],
+    jump: ['嘿嘿跳！', '妈的起飞！', '卧槽蹦蹦！', '跳起来~'],
+    spin: ['妈的转圈~', '卧槽晕了', '嘿嘿转转', '头晕了草'],
+    tumble: ['妈的翻跟头！', '卧槽厉害吧', '嘿嘿翻滚！', '牛逼不'],
+    dashing: ['妈的冲！', '卧槽冲刺！', '冲鸭！！', '冲冲冲！'],
+    wiggle: ['扭一扭~', '妈的摇起来', '嘿嘿屁股~', '扭扭扭~'],
+    jumprope: ['嘿嘿跳绳！', '妈的一百个！', '卧槽绳王！', '跳跳跳~'],
+    'run-circle': ['跑圈圈~', '妈的遛弯！', '卧槽转一圈', '溜达回来了~'],
+    singing: ['啦啦啦~', '妈的开演唱会！', '卧槽歌神！', '🎤我是一只仓鼠~'],
+    'dance-disco': ['妈的蹦迪！', '卧槽 disco！', '摇起来草！', '嘿！哈！'],
+    'dance-ballet': ['妈的天鹅湖！', '卧槽优雅！', '芭蕾仓鼠~', '转转转~'],
+    'dance-robot': ['妈的机器人！', '卧槽 0101！', '嘎嘎嘎嘎', '机械仓鼠！'],
+    'eat-sequence': ['妈的开饭！', '卧槽好吃！', '吃饱了好爽~', '嘎嘣脆！'],
+    'sleep-sequence': ['妈的困了...', '卧槽睡一会', '别吵 zzZ...', '梦里赚大钱~'],
   };
 
   function randomBubble(expr) {
@@ -575,6 +781,186 @@ const PetWidget = (() => {
     }, CONFIG.chatterInterval);
   }
 
+  // ══════════════════════════════════════════
+  //  行为系统：跑、跳、走、翻跟头等随机动作
+  // ══════════════════════════════════════════
+
+  // 根据心情决定行为权重
+  function pickRandomAction() {
+    const expr = state.currentExpr;
+    let pool;
+    if (expr === 'ecstatic') {
+      pool = ['run','run','jump','jump','tumble','spin','dashing','wiggling',
+              'jumprope','run-circle','singing','dance-disco','dance-ballet','dance-robot',
+              'eat-sequence','run-circle','dance-disco'];
+    } else if (expr === 'happy') {
+      pool = ['walk','walk','run','jump','wiggling','spin',
+              'jumprope','singing','dance-disco','dance-robot','eat-sequence','run-circle'];
+    } else if (expr === 'angry' || expr === 'furious') {
+      pool = ['run','run','dashing','jump','shaking','jumprope','dance-robot'];
+    } else {
+      pool = ['walk','walk','walk','jump','wiggling','walk','run',
+              'jumprope','singing','run-circle','eat-sequence','sleep-sequence','dance-robot'];
+    }
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // 计算目标位置（确保不超出屏幕）
+  function calcTargetPosition(action) {
+    const container = document.getElementById('petContainer');
+    if (!container) return null;
+    const rect = container.getBoundingClientRect();
+    const margin = 20;
+    const maxW = window.innerWidth - container.offsetWidth - margin;
+    const maxH = window.innerHeight - container.offsetHeight - margin;
+
+    let step;
+    if (action === 'run' || action === 'dashing') {
+      step = CONFIG.runStepPx;
+    } else {
+      step = CONFIG.walkStepPx;
+    }
+
+    // 随机方向偏移
+    const angle = Math.random() * Math.PI * 2;
+    let dx = Math.cos(angle) * step;
+    let dy = Math.sin(angle) * step;
+
+    // 限制在屏幕内
+    let targetX = Math.max(margin, Math.min(maxW, rect.left + dx));
+    let targetY = Math.max(margin, Math.min(maxH, rect.top + dy));
+
+    return { x: Math.round(targetX), y: Math.round(targetY) };
+  }
+
+  // 执行一个行为
+  function executeAction(action) {
+    if (state.actionInProgress || state.isDragging || state.lifeExpr) return;
+    if (document.hidden) return;
+
+    // 复合动作序列
+    const sequences = {
+      'eat-sequence': [
+        { action: 'eat-ready', dur: 1200, bubble: '妈的开饭！' },
+        { action: 'eat-chew', dur: 3000, bubble: '嘎嘣脆！' },
+        { action: 'eat-satisfied', dur: 2000, bubble: '吃饱了好爽~' },
+      ],
+      'sleep-sequence': [
+        { action: 'fall-asleep', dur: 2500, bubble: '妈的困了...' },
+        { action: 'deep-sleep', dur: 5000, bubble: 'zzZ...' },
+        { action: 'wake-up', dur: 2000, bubble: '卧槽醒了~' },
+      ],
+      'run-circle': [
+        { action: 'run-circle-right', dur: 2500, bubble: '跑圈圈~' },
+        { action: 'run-circle-left', dur: 2500, bubble: '溜达回来了~' },
+      ],
+    };
+
+    if (sequences[action]) {
+      executeSequence(action, sequences[action]);
+      return;
+    }
+
+    // 单一动作
+    state.actionInProgress = true;
+    state.currentAction = action;
+
+    const container = document.getElementById('petContainer');
+    if (!container) { state.actionInProgress = false; return; }
+
+    const movingActions = ['walk', 'run', 'dashing'];
+    const needMove = movingActions.includes(action);
+
+    render();
+    showBubble(randomBubble(action), 2000);
+
+    if (needMove) {
+      const target = calcTargetPosition(action);
+      if (target) {
+        container.style.left = target.x + 'px';
+        container.style.top = target.y + 'px';
+        container.style.bottom = 'auto';
+        container.style.right = 'auto';
+        container.style.transition = action === 'run' || action === 'dashing'
+          ? 'left 1.2s ease-in-out, top 1.2s ease-in-out'
+          : 'left 2.5s ease-in-out, top 2.5s ease-in-out';
+        setTimeout(() => {
+          localStorage.setItem('petPosition', JSON.stringify({ left: target.x, top: target.y }));
+        }, action === 'run' || action === 'dashing' ? 1300 : 2600);
+      }
+    }
+
+    const durations = {
+      walk: 2500, run: 1200, jump: 700, spin: 800,
+      tumble: 800, dashing: 500, wiggling: 800, shaking: 600,
+      jumprope: 4000, singing: 5000,
+      'dance-disco': 4000, 'dance-ballet': 4000, 'dance-robot': 4000,
+    };
+    const dur = durations[action] || 1000;
+
+    setTimeout(() => {
+      state.currentAction = null;
+      state.actionInProgress = false;
+      const c = document.getElementById('petContainer');
+      if (c) c.style.transition = '';
+      render();
+      scheduleNextAction();
+    }, dur);
+  }
+
+  // 执行复合动作序列
+  function executeSequence(seqName, steps) {
+    state.actionInProgress = true;
+    let stepIdx = 0;
+
+    function runStep() {
+      if (stepIdx >= steps.length) {
+        state.currentAction = null;
+        state.actionInProgress = false;
+        const c = document.getElementById('petContainer');
+        if (c) c.style.transition = '';
+        render();
+        scheduleNextAction();
+        return;
+      }
+      const step = steps[stepIdx];
+      state.currentAction = step.action;
+      render();
+      if (step.bubble) showBubble(step.bubble, step.dur - 200);
+      stepIdx++;
+      setTimeout(runStep, step.dur);
+    }
+    showBubble(randomBubble(seqName), 2000);
+    runStep();
+  }
+
+  // 调度下一个行为
+  function scheduleNextAction() {
+    if (actionTimer) clearTimeout(actionTimer);
+    const delay = CONFIG.actionMinInterval +
+      Math.random() * (CONFIG.actionMaxInterval - CONFIG.actionMinInterval);
+    actionTimer = setTimeout(() => {
+      if (!state.isDragging && !state.lifeExpr) {
+        executeAction(pickRandomAction());
+      } else {
+        scheduleNextAction(); // 忙碌则重新调度
+      }
+    }, delay);
+  }
+
+  // 启动行为系统
+  function startActionSystem() {
+    // 初始延迟 8 秒后开始第一次行为
+    actionTimer = setTimeout(() => {
+      if (!state.isDragging && !state.lifeExpr && !document.hidden) {
+        executeAction(pickRandomAction());
+      } else {
+        // 如果当前忙碌，用 scheduleNextAction 重试，确保链条不断
+        scheduleNextAction();
+      }
+    }, 8000);
+  }
+
   // ── 初始化 ──
   function init() {
     if (state.initialized) return;
@@ -653,6 +1039,9 @@ const PetWidget = (() => {
 
     // 启动碎碎念（5秒一句）
     startChatter();
+
+    // 启动行为系统（跑、跳、走等）
+    startActionSystem();
   }
 
   // ── 拖拽处理 ──
@@ -665,7 +1054,10 @@ const PetWidget = (() => {
     const rect = document.getElementById('petContainer').getBoundingClientRect();
     state.dragOffsetX = e.clientX - rect.left;
     state.dragOffsetY = e.clientY - rect.top;
-    document.getElementById('petContainer').classList.add('dragging');
+    // 拖拽时取消行为动画过渡，避免拖拽被覆盖
+    const container = document.getElementById('petContainer');
+    container.style.transition = 'none';
+    container.classList.add('dragging');
     e.preventDefault();
   }
 
@@ -723,7 +1115,9 @@ const PetWidget = (() => {
     const rect = document.getElementById('petContainer').getBoundingClientRect();
     state.dragOffsetX = touch.clientX - rect.left;
     state.dragOffsetY = touch.clientY - rect.top;
-    document.getElementById('petContainer').classList.add('dragging');
+    const container = document.getElementById('petContainer');
+    container.style.transition = 'none';
+    container.classList.add('dragging');
     e.preventDefault();
   }
 
@@ -773,6 +1167,7 @@ const PetWidget = (() => {
     clearInterval(chatterTimer);
     clearTimeout(lifeTimer);
     clearTimeout(bubbleTimer);
+    clearTimeout(actionTimer);
     const el = document.getElementById('petContainer');
     if (el) el.remove();
     state.initialized = false;

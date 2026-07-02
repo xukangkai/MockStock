@@ -36,6 +36,8 @@ def beijing_now() -> datetime:
 
 def is_trading_hours() -> bool:
     """判断当前是否在A股交易时间内（工作日 9:30-11:30, 13:00-15:00）"""
+    if os.environ.get("FORCE_TRADING") == "1":
+        return True
     now = beijing_now()
     if now.weekday() >= 5:  # 周末
         return False
@@ -45,6 +47,9 @@ def is_trading_hours() -> bool:
 # /api/picks 缓存：避免频繁调用 AI
 _picks_cache = {"data": [], "time": None}
 PICKS_CACHE_TTL = 300  # 缓存有效期 5 分钟
+
+# ── Agent 选股推荐缓存（统一决策源）──
+_agent_picks_cache = {"data": [], "time": None, "reasoning": []}
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
@@ -135,6 +140,27 @@ Base = declarative_base()
 import collections
 _realtime_logs = collections.deque(maxlen=200)  # 最多保存200条日志
 _log_lock = threading.Lock()
+
+# ── Agent 实时执行状态（多 Agent 可观测） ──
+_agent_live_status = {
+    "running": False,
+    "cycle_id": "",
+    "started_at": "",
+    "main_agent": {
+        "status": "idle",       # idle / thinking / done
+        "thinking": "",         # 当前在想什么
+        "decision": "",         # 最终决策摘要
+    },
+    "sub_agents": {
+        "memory":       {"name": "🧠 记忆大师",   "status": "idle", "thinking": "", "result": ""},
+        "market":       {"name": "📊 市场分析师",  "status": "idle", "thinking": "", "result": ""},
+        "position":     {"name": "💼 持仓管家",   "status": "idle", "thinking": "", "result": ""},
+        "researcher":   {"name": "🔍 候选猎手",   "status": "idle", "thinking": "", "result": ""},
+        "risk":         {"name": "🛡️ 风控卫士",   "status": "idle", "thinking": "", "result": ""},
+        "synthesizer":  {"name": "🎯 总指挥",     "status": "idle", "thinking": "", "result": ""},
+    },
+}
+_agent_status_lock = threading.Lock()
 
 def add_realtime_log(level: str, message: str, detail: str = ""):
     """添加实时日志"""
@@ -882,10 +908,11 @@ def build_agent_cycle_context(cycle_id: str, timestamp: str, account_info: Dict,
     }
 
 
-def recall_recent_agent_memory(db: Session, limit: int = 5, memory_type: str = "short_term") -> Dict:
-    rows = db.query(AgentMemoryModel).filter(
-        AgentMemoryModel.memory_type == memory_type
-    ).order_by(AgentMemoryModel.memory_date.desc()).limit(limit).all()
+def recall_recent_agent_memory(db: Session, limit: int = 5, memory_type: str = "") -> Dict:
+    query = db.query(AgentMemoryModel)
+    if memory_type:
+        query = query.filter(AgentMemoryModel.memory_type == memory_type)
+    rows = query.order_by(AgentMemoryModel.memory_date.desc()).limit(limit).all()
 
     items = []
     notes = []
@@ -920,94 +947,618 @@ class TradingAgentState(TypedDict, total=False):
     candidate_assessments: List[Dict[str, Any]]
     risk_review: Dict[str, Any]
     final_plan: Dict[str, Any]
+    reasoning: List[str]
 
 
 
+def _update_agent_thinking(agent_key: str, msg: str):
+    """实时更新子 Agent 的思考状态。"""
+    with _agent_status_lock:
+        ag = _agent_live_status["sub_agents"].get(agent_key, {})
+        ag["thinking"] = msg
+
+
+def _agent_ai_call(agent_key: str, prompt: str, context_summary: str = "") -> str:
+    """子 Agent 调用 AI，实时更新思考过程。"""
+    _update_agent_thinking(agent_key, f"正在调用 AI 分析... {context_summary}")
+    result = ai_call([{"role": "user", "content": prompt}], temperature=0.3)
+    return result
+
+
+def _safe_json_from_ai(text: str) -> Dict:
+    """从 AI 回复中安全提取 JSON。"""
+    text = text.strip()
+    # 尝试直接解析
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    # 提取 ```json ... ``` 块
+    import re
+    m = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(1))
+        except Exception:
+            pass
+    # 提取第一个 { ... }
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except Exception:
+            pass
+    return {}
+
+
+# ── 子 Agent 0: 🧠 记忆大师（不调 AI，纯数据检索）──
+# (recall_memory 节点在 build_trading_agent_graph 中定义为 lambda)
+
+
+# ── 子 Agent 1: 📊 市场分析师（AI 调用）──
 def run_market_analysis_node(state: TradingAgentState) -> Dict[str, Any]:
     context = state["context"]
     snapshot = context.get("market_snapshot", {})
+    positions = context.get("positions", [])
+    candidates = context.get("candidates", [])
+    acct = context.get("account", {})
+
     score = float(snapshot.get("score", 50) or 50)
-    regime = "bullish" if score >= 70 else "defensive" if score <= 45 else "neutral"
+    sentiment = snapshot.get("sentiment", "未知")
+    up_count = snapshot.get("up_count", 0)
+    down_count = snapshot.get("down_count", 0)
+
+    _update_agent_thinking("market", f"市场分数 {score}，情绪: {sentiment}，涨 {up_count} 跌 {down_count}，正在构建分析 prompt...")
+
+    prompt = f"""你是A股市场分析师，专注短线交易环境评估。
+
+## 当前市场数据
+- 情绪分数: {score}/100
+- 情绪状态: {sentiment}
+- 涨跌比: {up_count}:{down_count}
+- 当前持仓: {len(positions)} 只
+- 候选标的: {len(candidates)} 只
+- 可用现金: ¥{acct.get('available_cash', 0):,.0f}
+
+## 你的任务
+分析当前市场环境，判断大盘格局和操作策略。
+
+## 输出JSON（严格）
+{{
+  "regime": "bullish / neutral / defensive",
+  "risk_bias": "aggressive / balanced / conservative",
+  "reasoning": "你的分析推理过程（100字内，中文）",
+  "sector_focus": ["看好的板块1", "板块2"],
+  "warnings": ["风险提示1", "风险提示2"]
+}}"""
+
+    raw = _agent_ai_call("market", prompt, f"情绪{score}")
+    data = _safe_json_from_ai(raw)
+    _update_agent_thinking("market", data.get("reasoning", raw[:200]))
+
+    regime = data.get("regime", "neutral")
+    if regime not in ("bullish", "neutral", "defensive"):
+        regime = "neutral"
     return {
         "market_assessment": {
             "regime": regime,
             "sentiment_score": score,
-            "risk_bias": "aggressive" if score >= 70 else "conservative" if score <= 45 else "balanced",
-            "sector_focus": [],
-            "warnings": [],
-            "reasoning": snapshot.get("sentiment", "市场中性"),
+            "risk_bias": data.get("risk_bias", "balanced"),
+            "sector_focus": data.get("sector_focus", []),
+            "warnings": data.get("warnings", []),
+            "reasoning": data.get("reasoning", "分析完成"),
         }
     }
 
 
-
+# ── 子 Agent 2: 💼 持仓管家（AI 审视每只持仓）──
 def run_position_review_node(state: TradingAgentState) -> Dict[str, Any]:
-    positions = []
-    for pos in state["context"].get("positions", []):
-        positions.append({
-            "symbol": pos["symbol"],
-            "action": "hold",
-            "target_pct": min(50.0, pos.get("target_pct", 20.0) or 20.0),
-            "confidence": 0.6,
-            "thesis": "等待 AI 细化",
-            "risks": [],
-            "supports": [],
-        })
-    return {"position_assessments": positions}
+    positions = state["context"].get("positions", [])
+    if not positions:
+        return {"position_assessments": []}
+
+    _update_agent_thinking("position", f"正在准备 {len(positions)} 只持仓的详细数据...")
+
+    pos_lines = []
+    for p in positions:
+        pnl = p.get("pnl_pct", 0)
+        emoji = "🟢" if pnl >= 0 else "🔴"
+        pos_lines.append(
+            f"- {p['symbol']} {p.get('name','')}: 成本¥{p.get('buy_price',0):.2f} "
+            f"现价¥{p.get('current_price',0):.2f} {emoji}{pnl:+.1f}% "
+            f"持有{p.get('days_held',0)}天 止损¥{p.get('stop_loss',0):.2f} "
+            f"数量{p.get('qty',0)}股 可卖{p.get('available_to_sell',0)}股"
+        )
+    pos_text = "\n".join(pos_lines)
+
+    prompt = f"""你是A股持仓管理专家，拥有完全自主权。你的目标是最大化组合收益。
+
+## 当前持仓
+{pos_text}
+
+## ⚠️ 交易规则（必须遵守）
+- **T+1规则**: 股票今天买入，明天才能卖出。"可卖"字段显示当前可卖数量，可卖=0说明今天刚买不能卖
+- **ETF例外**: ETF基金可以T+0（当天买入当天可卖）
+- **最小单位**: 1手=100股，卖出不足100股的零股可以一次性卖出
+
+## 你的决策原则
+1. **止损纪律**: 亏损超过5%的持仓，除非有极强反转信号，否则果断exit
+2. **止盈智慧**: 盈利超过10%的持仓，评估趋势是否延续。趋势健康→hold，趋势衰竭→reduce/exit
+3. **加仓逻辑**: 趋势强化、仓位不高、有明确支撑时可以add
+4. **机会成本**: 如果持仓不如市场上的新候选，果断exit换股
+5. **仓位管理**: 单票不超过总资金40%，保持灵活性
+6. **注意可卖数量**: 如果可卖=0，不要建议exit/reduce，只能hold
+
+## 关键判断依据
+- 技术面：均线趋势、MACD信号、RSI超买超卖、成交量变化
+- 基本面：业绩增速、估值水平
+- 市场环境：大盘趋势、板块轮动
+
+## 输出JSON（严格）
+{{
+  "assessments": [
+    {{
+      "symbol": "股票代码",
+      "action": "add / hold / reduce / exit",
+      "target_pct": 20,
+      "confidence": 60,
+      "thesis": "你的判断推理（50字内，中文）",
+      "risks": ["风险1"],
+      "supports": ["支撑1"]
+    }}
+  ]
+}}"""
+
+    raw = _agent_ai_call("position", prompt, f"{len(positions)}只持仓")
+    data = _safe_json_from_ai(raw)
+    assessments = data.get("assessments", [])
+
+    # 如果 AI 没返回有效数据，对每只持仓默认 hold
+    if not assessments:
+        assessments = [{"symbol": p["symbol"], "action": "hold", "target_pct": 20,
+                        "confidence": 60, "thesis": "AI 未返回有效分析，默认持有",
+                        "risks": [], "supports": []} for p in positions]
+
+    summary_parts = [f"{a.get('symbol','')}: {a.get('action','')} ({a.get('thesis','')[:20]})" for a in assessments[:3]]
+    _update_agent_thinking("position", " → ".join(summary_parts))
+
+    return {"position_assessments": assessments}
 
 
-
+# ── 子 Agent 3: 🔍 候选猎手（AI 筛选候选标的）──
 def run_candidate_research_node(state: TradingAgentState) -> Dict[str, Any]:
-    return {"candidate_assessments": []}
+    candidates = state["context"].get("candidates", [])
+    acct = state["context"].get("account", {})
+    market = state.get("market_assessment", {})
+
+    if not candidates:
+        _update_agent_thinking("researcher", "无候选标的，跳过筛选")
+        return {"candidate_assessments": []}
+
+    _update_agent_thinking("researcher", f"正在分析 {len(candidates)} 只候选标的...")
+
+    cand_lines = []
+    for c in candidates[:8]:
+        tech = []
+        if c.get("ma5"):
+            tech.append(f"MA5={c['ma5']}")
+        if c.get("pe"):
+            tech.append(f"PE={c['pe']}")
+        if c.get("net_profit_yoy") is not None:
+            tech.append(f"净利增速={c['net_profit_yoy']}%")
+        tech_str = " ".join(tech)
+        cand_lines.append(
+            f"- {c['symbol']} {c.get('name','')}: ¥{c.get('price',0):.2f} "
+            f"成交额¥{c.get('amount',0)/1e8:.1f}亿 {tech_str}"
+        )
+    cand_text = "\n".join(cand_lines)
+
+    prompt = f"""你是A股短线选股专家。
+
+## 候选标的（按成交额排序前8）
+{cand_text}
+
+## 账户约束
+- 可用现金: ¥{acct.get('available_cash', 0):,.0f}
+- 最大持仓: {acct.get('max_positions', 3)} 只
+- 当前持仓: {acct.get('current_positions', 0)} 只
+- 市场格局: {market.get('regime', 'neutral')}
+
+## 选股标准
+- 技术面：MA趋势向上、回调到支撑位、量价配合
+- 基本面：正增长、合理估值
+- 价格：股票5-50元，ETF 0.5-5元
+- 只推荐买得起的（价格×100 ≤ 可用现金）
+
+## 输出JSON（严格）
+{{
+  "assessments": [
+    {{
+      "symbol": "代码",
+      "name": "名称",
+      "kind": "stock / etf",
+      "reason": "推荐理由（80字内，含技术面分析）",
+      "entry_price": 0.00,
+      "stop_loss": 0.00,
+      "target_price": 0.00,
+      "confidence": 70,
+      "time_horizon": "3-30天"
+    }}
+  ],
+  "reasoning": "你的筛选逻辑和推理过程（100字内）"
+}}"""
+
+    raw = _agent_ai_call("researcher", prompt, f"{len(candidates)}只候选")
+    data = _safe_json_from_ai(raw)
+    assessments = data.get("assessments", [])
+    reasoning = data.get("reasoning", "")
+
+    if assessments:
+        syms = ", ".join([a.get("symbol","") for a in assessments[:3]])
+        _update_agent_thinking("researcher", reasoning or f"筛选出: {syms}")
+    else:
+        _update_agent_thinking("researcher", reasoning or "本轮无符合标准的标的")
+
+    return {"candidate_assessments": assessments}
 
 
-
+# ── 子 Agent 4: 🛡️ 风控卫士（AI 评估组合风险）──
 def run_risk_review_node(state: TradingAgentState) -> Dict[str, Any]:
+    positions = state["context"].get("positions", [])
+    acct = state["context"].get("account", {})
+    market = state.get("market_assessment", {})
+    position_assessments = state.get("position_assessments", [])
+    candidates = state.get("candidate_assessments", [])
+
+    _update_agent_thinking("risk", "正在评估组合整体风险...")
+
+    # 构建持仓动作摘要（含P&L信息）
+    action_lines = []
+    pos_map = {p.get("symbol"): p for p in positions}
+    for a in position_assessments:
+        sym = a.get('symbol', '')
+        pos = pos_map.get(sym, {})
+        pnl = pos.get('pnl_pct', 0)
+        emoji = "🟢" if pnl >= 0 else "🔴"
+        action_lines.append(f"- {sym} {pos.get('name','')}: {emoji}{pnl:+.1f}% 计划 {a.get('action','hold')} 目标仓位 {a.get('target_pct',20)}% 信心{a.get('confidence',60)}%")
+    for c in candidates[:3]:
+        action_lines.append(f"- {c.get('symbol','')} {c.get('name','')}: 计划买入 信心{c.get('confidence',0)}%")
+    action_text = "\n".join(action_lines) if action_lines else "无操作计划"
+
+    prompt = f"""你是A股风控专家，拥有最高决策权。你负责：风险评估、止盈止损决策、仓位管控。
+
+## 当前账户
+- 总资金: ¥{acct.get('initial_cash', 0):,.0f}
+- 可用现金: ¥{acct.get('available_cash', 0):,.0f}
+- 当前持仓: {acct.get('current_positions', 0)} / {acct.get('max_positions', 3)} 只
+
+## 市场格局
+- 格局: {market.get('regime', 'neutral')}
+- 风险偏好: {market.get('risk_bias', 'balanced')}
+
+## 计划中的操作
+{action_text}
+
+## 你的核心职责
+1. **止损决策**: 亏损持仓是否需要止损？参考持仓管家的建议，但你可以更严格或更宽松
+2. **止盈决策**: 盈利持仓是否应该止盈？看趋势是否衰竭、是否有更好的机会
+3. **仓位管控**: 单票集中度、现金储备、整体风险敞口
+4. **逆市保护**: 市场大跌时是否应该减仓避险？
+5. **机会成本**: 持有的股票是否不如换到更好的标的？
+
+## 风控原则
+- 亏损 -5% 以下的持仓，强烈建议 exit
+- 盈利 +10% 以上的持仓，评估趋势决定 reduce/hold/exit
+- 单票仓位不超过总资金 40%
+- 现金至少保留 10%
+- 市场恐慌（大盘跌>3%）时，优先减仓避险
+
+## 输出JSON（严格）
+{{
+  "overall_pass": true,
+  "risk_level": "low / medium / high",
+  "blocked_actions": ["被阻止的操作说明"],
+  "adjustments": ["调整建议1"],
+  "notes": ["风控备注1"],
+  "force_exit": ["需要强制止损的股票代码（如果持仓管家没有建议exit但你觉得必须止损）"],
+  "force_take_profit": ["需要强制止盈的股票代码（如果趋势已破坏）"],
+  "reasoning": "你的风控推理过程（100字内）"
+}}"""
+
+    raw = _agent_ai_call("risk", prompt, f"检查{len(position_assessments)}个操作")
+    data = _safe_json_from_ai(raw)
+
+    _update_agent_thinking("risk", data.get("reasoning", f"风险等级: {data.get('risk_level', 'medium')}"))
+
     return {
         "risk_review": {
-            "overall_pass": True,
-            "risk_level": "medium",
-            "blocked_actions": [],
-            "adjustments": [],
-            "notes": [],
+            "overall_pass": data.get("overall_pass", True),
+            "risk_level": data.get("risk_level", "medium"),
+            "blocked_actions": data.get("blocked_actions", []),
+            "adjustments": data.get("adjustments", []),
+            "notes": data.get("notes", []),
+            "reasoning": data.get("reasoning", ""),
         }
     }
 
 
-
+# ── 子 Agent 5: 🎯 总指挥（AI 综合决策）──
 def run_decision_synthesizer_node(state: TradingAgentState) -> Dict[str, Any]:
-    assessments = state.get("position_assessments", [])
+    market = state.get("market_assessment", {})
+    position_assessments = state.get("position_assessments", [])
+    candidate_assessments = state.get("candidate_assessments", [])
+    risk = state.get("risk_review", {})
+    context = state["context"]
+    acct = context.get("account", {})
+    memory = state.get("memory_summary", {})
+
+    _update_agent_thinking("synthesizer", "正在综合所有子 Agent 的分析结果...")
+
+    pos_summary = "\n".join([
+        f"- {a.get('symbol','')}: {a.get('action','hold')} 信心{a.get('confidence',60)}% 理由: {a.get('thesis','')}"
+        for a in position_assessments
+    ]) or "无持仓"
+
+    cand_summary = "\n".join([
+        f"- {c.get('symbol','')} {c.get('name','')}: ¥{c.get('entry_price',0):.2f} 信心{c.get('confidence',0)}% 理由: {c.get('reason','')}"
+        for c in candidate_assessments[:3]
+    ]) or "无候选"
+
+    blocked = ", ".join(risk.get("blocked_actions", [])) or "无"
+    adjustments = ", ".join(risk.get("adjustments", [])) or "无"
+    force_exit = risk.get("force_exit", [])
+    force_take_profit = risk.get("force_take_profit", [])
+
+    prompt = f"""你是A股交易总指挥，拥有完全自主决策权。你的目标是持续盈利。
+
+## 各团队分析结果
+
+### 📊 市场分析师
+- 格局: {market.get('regime', 'neutral')}
+- 风险偏好: {market.get('risk_bias', 'balanced')}
+- 分析: {market.get('reasoning', '')}
+
+### 💼 持仓管家建议
+{pos_summary}
+
+### 🔍 候选猎手推荐
+{cand_summary}
+
+### 🛡️ 风控卫士
+- 风险等级: {risk.get('risk_level', 'medium')}
+- 阻止操作: {blocked}
+- 调整建议: {adjustments}
+- 强制止损标的: {', '.join(force_exit) if force_exit else '无'}
+- 强制止盈标的: {', '.join(force_take_profit) if force_take_profit else '无'}
+
+## 账户信息
+- 可用现金: ¥{acct.get('available_cash', 0):,.0f}
+- 最大持仓: {acct.get('max_positions', 3)} 只
+
+## 你的决策原则
+1. **风控卫士的force_exit必须执行** — 这是底线
+2. **优先处理持仓** — exit/reduce 优先于 buy，释放资金
+3. **买入要精选** — 只买信心>70%的标的，不要为了买而买
+4. **多标的可以同时操作** — 卖出亏损的、买入看好的，一轮可以做多笔
+5. **空仓也是一种策略** — 市场不好时，持币等待比乱买更好
+
+## 输出JSON（严格）
+{{
+  "market_analysis": "市场总结（50字内）",
+  "risk_level": "low / mid / high",
+  "portfolio_bias": "aggressive / balanced / conservative",
+  "cash_reserve_target": 0.35,
+  "confidence": 0.6,
+  "summary": "决策摘要（30字内）",
+  "position_actions": [
+    {{"symbol": "代码", "action": "add/hold/reduce/exit", "target_pct": 20}}
+  ],
+  "buy_picks": [
+    {{"symbol": "代码", "name": "名称", "entry_price": 0, "stop_loss": 0, "target_price": 0, "confidence": 70, "reason": "买入理由"}}
+  ],
+  "reasoning": ["推理步骤1", "推理步骤2", "推理步骤3"]
+}}"""
+
+    raw = _agent_ai_call("synthesizer", prompt, "最终决策")
+    data = _safe_json_from_ai(raw)
+
+    # 构建最终计划
+    position_actions = data.get("position_actions", [])
+
+    # 强制执行风控卫士的 force_exit（覆盖持仓管家的 hold/reduce）
+    force_exit = risk.get("force_exit", [])
+    if force_exit:
+        existing_symbols = {pa.get("symbol") for pa in position_actions}
+        for sym in force_exit:
+            if sym and sym not in existing_symbols:
+                position_actions.append({"symbol": sym, "action": "exit", "target_pct": 0,
+                                         "reason": "风控卫士强制止损"})
+            elif sym:
+                # 覆盖为 exit
+                for pa in position_actions:
+                    if pa.get("symbol") == sym and pa.get("action") != "exit":
+                        pa["action"] = "exit"
+                        pa["reason"] = "风控卫士强制止损（覆盖原决策）"
+
+    # 强制执行风控卫士的 force_take_profit
+    force_tp = risk.get("force_take_profit", [])
+    if force_tp:
+        existing_symbols = {pa.get("symbol") for pa in position_actions}
+        for sym in force_tp:
+            if sym and sym not in existing_symbols:
+                position_actions.append({"symbol": sym, "action": "reduce", "target_pct": 10,
+                                         "reason": "风控卫士强制止盈"})
+            elif sym:
+                for pa in position_actions:
+                    if pa.get("symbol") == sym and pa.get("action") in ("hold", "add"):
+                        pa["action"] = "reduce"
+                        pa["reason"] = "风控卫士强制止盈（覆盖原决策）"
+
     final_plan = {
-        "cycle_id": state["context"]["cycle_id"],
-        "position_actions": [
-            {
-                "symbol": item["symbol"],
-                "action": item["action"],
-                "target_pct": item["target_pct"],
-            }
-            for item in assessments
-        ],
+        "cycle_id": context.get("cycle_id", ""),
+        "market_analysis": data.get("market_analysis", ""),
+        "risk_level": data.get("risk_level", "medium"),
+        "portfolio_bias": data.get("portfolio_bias", "balanced"),
+        "cash_reserve_target": data.get("cash_reserve_target", 0.35),
+        "confidence": data.get("confidence", 0.6),
+        "summary": data.get("summary", ""),
+        "position_actions": position_actions,
+        "buy_picks": data.get("buy_picks", []),
+        "reasoning": data.get("reasoning", []),
         "new_entries": [],
-        "buy_picks": [],
-        "portfolio_bias": state.get("market_assessment", {}).get("risk_bias", "balanced"),
-        "cash_reserve_target": 0.35,
-        "summary": state.get("market_assessment", {}).get("reasoning", "Agent plan"),
-        "confidence": 0.6,
-        "risk_level": state.get("risk_review", {}).get("risk_level", "medium"),
     }
+
+    # 从各子 Agent 收集推理链
+    all_reasoning = []
+    if market.get("reasoning"):
+        all_reasoning.append(f"[市场] {market['reasoning']}")
+    for a in position_assessments:
+        if a.get("thesis"):
+            all_reasoning.append(f"[持仓:{a.get('symbol','')}] {a['thesis']}")
+    if risk.get("reasoning"):
+        all_reasoning.append(f"[风控] {risk['reasoning']}")
+    all_reasoning.extend(data.get("reasoning", []))
+    final_plan["reasoning"] = all_reasoning
+
+    decision_parts = []
+    for a in final_plan.get("position_actions", []):
+        decision_parts.append(f"{a.get('action','')} {a.get('symbol','')}")
+    for b in final_plan.get("buy_picks", []):
+        decision_parts.append(f"买入 {b.get('symbol','')}")
+    _update_agent_thinking("synthesizer", "，".join(decision_parts) if decision_parts else "维持现状")
+
     return {"final_plan": final_plan}
 
+
+
+_NODE_TO_AGENT_KEY = {
+    "recall_memory": "memory",
+    "analyze_market": "market",
+    "review_positions": "position",
+    "research_candidates": "researcher",
+    "risk_review": "risk",
+    "synthesize_decision": "synthesizer",
+}
+
+def _make_tracked_node(node_name: str, real_fn):
+    """包装节点函数，执行前后更新子 Agent 实时状态。"""
+    agent_key = _NODE_TO_AGENT_KEY.get(node_name, node_name)
+    def _wrapper(state):
+        ctx = state.get("context", {})
+        with _agent_status_lock:
+            ag = _agent_live_status["sub_agents"].get(agent_key, {})
+            ag["status"] = "thinking"
+            ag["thinking"] = _build_agent_thinking(agent_key, state)
+            ag["result"] = ""
+        try:
+            result = real_fn(state)
+        except Exception as e:
+            result = {}
+            print(f"[Agent] 节点 {node_name} 异常: {e}")
+        with _agent_status_lock:
+            ag = _agent_live_status["sub_agents"].get(agent_key, {})
+            ag["status"] = "done"
+            ag["result"] = _build_agent_result(agent_key, result)
+        return result
+    return _wrapper
+
+
+def _build_agent_thinking(agent_key: str, state: Dict) -> str:
+    """根据子 Agent 类型，生成它当前正在思考的内容描述。"""
+    ctx = state.get("context", {})
+    positions = ctx.get("positions", [])
+    candidates = ctx.get("candidates", [])
+    acct = ctx.get("account", {})
+    market = ctx.get("market_snapshot", {})
+
+    if agent_key == "memory":
+        return "正在检索近期决策记忆和市场观察..."
+    elif agent_key == "market":
+        score = market.get("score", "?")
+        return f"正在分析市场情绪（当前分数: {score}）、涨跌比、板块轮动..."
+    elif agent_key == "position":
+        syms = ", ".join([f"{p.get('symbol','')}{p.get('name','')}" for p in positions[:3]])
+        return f"正在审视 {len(positions)} 只持仓: {syms or '无'} ..."
+    elif agent_key == "researcher":
+        return f"正在从 {len(candidates)} 只候选中筛选潜力股..."
+    elif agent_key == "risk":
+        return "正在评估组合风险、现金比例、单票集中度..."
+    elif agent_key == "synthesizer":
+        return "正在综合所有分析结果，制定最终交易计划..."
+    return "处理中..."
+
+
+def _build_agent_result(agent_key: str, result: Dict) -> str:
+    """根据子 Agent 类型，提取结果摘要。"""
+    if not result:
+        return "（无输出）"
+
+    if agent_key == "memory":
+        mem = result.get("memory_summary", {})
+        items = mem.get("items", [])
+        if items:
+            summaries = []
+            for it in items[:3]:
+                c = it.get("content", {})
+                if isinstance(c, dict) and c.get("actions"):
+                    summaries.append(c["actions"][:30])
+            return f"召回 {len(items)} 条: {'; '.join(summaries)}" if summaries else f"召回 {len(items)} 条记忆"
+        return "首次决策，暂无历史"
+    elif agent_key == "market":
+        assess = result.get("market_assessment", {})
+        regime = assess.get("regime", "?")
+        bias = assess.get("risk_bias", "?")
+        return f"格局: {regime}，偏好: {bias}"
+    elif agent_key == "position":
+        items = result.get("position_assessments", [])
+        if not items:
+            return "无持仓需要审视"
+        summaries = [f"{it.get('symbol','')}: {it.get('action','')}" for it in items[:3]]
+        return "，".join(summaries)
+    elif agent_key == "researcher":
+        items = result.get("candidate_assessments", [])
+        return f"筛选出 {len(items)} 只候选" if items else "本轮无合适候选"
+    elif agent_key == "risk":
+        rr = result.get("risk_review", {})
+        level = rr.get("risk_level", "?")
+        return f"风险等级: {level}"
+    elif agent_key == "synthesizer":
+        plan = result.get("final_plan", {})
+        actions = plan.get("position_actions", [])
+        buys = plan.get("buy_picks", [])
+        parts = []
+        if actions:
+            parts.extend([f"{a.get('action','')} {a.get('symbol','')}" for a in actions[:3]])
+        if buys:
+            parts.extend([f"买入 {b.get('symbol','')}" for b in buys[:3]])
+        return "，".join(parts) if parts else "维持现状，不操作"
+    return "完成"
 
 
 def build_trading_agent_graph():
     """构建交易 Agent 有向图，串联记忆召回、市场分析、持仓审视、候选研究、风控审查和决策综合六个节点。"""
     graph = StateGraph(TradingAgentState)
-    graph.add_node("recall_memory", lambda state: {"memory_summary": state["context"].get("memory_summary", {})})
-    graph.add_node("analyze_market", run_market_analysis_node)
-    graph.add_node("review_positions", run_position_review_node)
-    graph.add_node("research_candidates", run_candidate_research_node)
-    graph.add_node("risk_review", run_risk_review_node)
-    graph.add_node("synthesize_decision", run_decision_synthesizer_node)
+    def _recall_memory_node(state):
+        mem = state["context"].get("memory_summary", {})
+        items = mem.get("items", [])
+        notes = mem.get("notes", [])
+        if items:
+            summaries = []
+            for it in items[:3]:
+                c = it.get("content", {})
+                if isinstance(c, dict):
+                    summaries.append(c.get("summary", c.get("actions", ""))[:40])
+            _update_agent_thinking("memory", f"召回 {len(items)} 条记忆: {', '.join(summaries) or '已加载'}")
+        else:
+            _update_agent_thinking("memory", "记忆库为空，首次决策无历史参考")
+        return {"memory_summary": mem}
+
+    graph.add_node("recall_memory", _make_tracked_node("recall_memory", _recall_memory_node))
+    graph.add_node("analyze_market", _make_tracked_node("analyze_market", run_market_analysis_node))
+    graph.add_node("review_positions", _make_tracked_node("review_positions", run_position_review_node))
+    graph.add_node("research_candidates", _make_tracked_node("research_candidates", run_candidate_research_node))
+    graph.add_node("risk_review", _make_tracked_node("risk_review", run_risk_review_node))
+    graph.add_node("synthesize_decision", _make_tracked_node("synthesize_decision", run_decision_synthesizer_node))
 
     graph.set_entry_point("recall_memory")
     graph.add_edge("recall_memory", "analyze_market")
@@ -1022,12 +1573,43 @@ def build_trading_agent_graph():
 
 def run_trading_agent_cycle(context: Dict[str, Any]) -> Dict[str, Any]:
     """执行一次完整的交易 Agent 决策周期，返回最终计划字典。异常时返回空安全计划。"""
+    now = beijing_now().strftime("%Y-%m-%d %H:%M:%S")
+    cycle_id = context.get("cycle_id", "")
+    with _agent_status_lock:
+        _agent_live_status["running"] = True
+        _agent_live_status["cycle_id"] = cycle_id
+        _agent_live_status["started_at"] = now
+        _agent_live_status["main_agent"] = {"status": "thinking", "thinking": "正在组织 6 个子 Agent 协同决策...", "decision": ""}
+        for ag in _agent_live_status["sub_agents"].values():
+            ag["status"] = "idle"
+            ag["thinking"] = ""
+            ag["result"] = ""
     graph = build_trading_agent_graph()
     try:
         result = graph.invoke({"context": context})
-        return result.get("final_plan", {})
+        plan = result.get("final_plan", {})
+        # 构建主 Agent 决策摘要
+        actions = plan.get("position_actions", [])
+        buys = plan.get("buy_picks", [])
+        decision_parts = []
+        for a in actions[:3]:
+            decision_parts.append(f"{a.get('action','')} {a.get('symbol','')}")
+        for b in buys[:3]:
+            decision_parts.append(f"买入 {b.get('symbol','')}")
+        decision_str = "，".join(decision_parts) if decision_parts else "维持现状"
+        with _agent_status_lock:
+            _agent_live_status["running"] = False
+            _agent_live_status["main_agent"]["status"] = "done"
+            _agent_live_status["main_agent"]["thinking"] = ""
+            _agent_live_status["main_agent"]["decision"] = decision_str
+        return plan
     except Exception as e:
         print(f"[Agent] 交易周期执行异常: {e}")
+        with _agent_status_lock:
+            _agent_live_status["running"] = False
+            _agent_live_status["main_agent"]["status"] = "done"
+            _agent_live_status["main_agent"]["thinking"] = ""
+            _agent_live_status["main_agent"]["decision"] = f"异常回退: {e}"
         return {
             "cycle_id": context.get("cycle_id", ""),
             "position_actions": [],
@@ -1158,7 +1740,73 @@ def run_agent_cycle_with_fallback(db: Session, context: Dict[str, Any]) -> Dict[
         plan = validate_final_trading_plan(plan)
         cycle_id = str(uuid.uuid4())
         log_agent_cycle(db, cycle_id, context, plan)
+
+        # ── 自动存储决策记忆 ──
+        from datetime import date as _date
+        today = _date.today().isoformat()
+        actions = plan.get("position_actions", [])
+        buys = plan.get("buy_picks", [])
+        summary = plan.get("summary", "")
+        reasoning = plan.get("reasoning", [])
+
+        action_parts = []
+        for a in actions[:3]:
+            action_parts.append(f"{a.get('action','')} {a.get('symbol','')}")
+        for b in buys[:3]:
+            action_parts.append(f"买入 {b.get('symbol','')}")
+        action_str = "，".join(action_parts) if action_parts else "维持现状"
+
+        store_agent_memory(db, "decision", today,
+            f"决策-{cycle_id[:8]}",
+            {
+                "summary": summary,
+                "actions": action_str,
+                "risk_level": plan.get("risk_level", ""),
+                "confidence": plan.get("confidence", 0),
+                "reasoning": reasoning[:5],
+                "market_regime": context.get("market_snapshot", {}).get("sentiment", ""),
+            },
+            source="agent_cycle")
+
+        # ── 存储市场观察记忆 ──
+        market = context.get("market_snapshot", {})
+        if market.get("score"):
+            store_agent_memory(db, "market", today,
+                f"市场观察-{today}",
+                {
+                    "score": market.get("score"),
+                    "sentiment": market.get("sentiment", ""),
+                    "regime": plan.get("market_analysis", ""),
+                },
+                source="market_agent")
+
         db.commit()
+
+        # ── 更新 Agent 选股推荐缓存（统一决策源）──
+        global _agent_picks_cache
+        agent_buy_picks = plan.get("buy_picks", [])
+        candidate_assessments = context.get("_candidate_assessments", [])
+        # 优先用候选猎手的分析，其次用总指挥的 buy_picks
+        picks_data = []
+        for bp in agent_buy_picks:
+            picks_data.append({
+                "symbol": bp.get("symbol", ""),
+                "name": bp.get("name", ""),
+                "price": bp.get("entry_price", 0),
+                "confidence": bp.get("confidence", 0),
+                "score": bp.get("confidence", 0),
+                "reason": bp.get("reason", "")[:100],
+                "reasons": [bp.get("reason", "")[:100]] if bp.get("reason") else [],
+                "stop_loss": bp.get("stop_loss", ""),
+                "target": bp.get("target_price", ""),
+                "source": "agent",
+            })
+        _agent_picks_cache = {
+            "data": picks_data,
+            "time": beijing_now(),
+            "reasoning": plan.get("reasoning", []),
+        }
+
         add_realtime_log("info", "🧠 Agent 决策周期完成")
         return plan
     except Exception as e:
@@ -2002,6 +2650,9 @@ class AutonomousTradingEngine:
         self._running = False
         self._buy_amount_today = 0.0
         self._buy_date_today = ""
+        self._force_decision_mode = True  # 界面持续运行模式（仅控制轮询频率/状态显示，真实买卖仍校验交易时间）
+        self._last_tick_at: Optional[datetime] = None  # 上次决策完成时间
+        self._next_tick_at: Optional[datetime] = None  # 下次决策预计时间
 
         # 策略参数 - 平衡激进型（适合新手+追求高收益）
         self.initial_cash = 10000.0              # 初始资金1万元
@@ -2038,8 +2689,9 @@ class AutonomousTradingEngine:
     def is_running(self) -> bool:
         return self._running
 
-    def _is_trading_time(self) -> bool:
-        """检查是否在A股交易时间内（9:30-11:30, 13:00-15:00）"""
+    @staticmethod
+    def _is_real_trading_time() -> bool:
+        """真实A股交易时间检查（仅判断工作日 9:30-11:30, 13:00-15:00）—— 买卖执行的最终校验，不受任何模式影响"""
         now = beijing_now()
         weekday = now.weekday()  # 0=周一, 6=周日
         if weekday >= 5:  # 周末不交易
@@ -2051,15 +2703,25 @@ class AutonomousTradingEngine:
         afternoon_end = dtime(15, 0)
         return (morning_start <= t <= morning_end) or (afternoon_start <= t <= afternoon_end)
 
+    def _is_trading_time(self) -> bool:
+        """界面/轮询用交易时间判断——受持续运行模式影响，仅控制主循环频率和状态显示，不影响真实买卖"""
+        if self._force_decision_mode or os.environ.get("FORCE_TRADING") == "1":
+            return True
+        return self._is_real_trading_time()
+
     def _loop(self):
         """主循环"""
         while not self._stop_event.is_set():
             try:
+                # 计算下次决策时间
+                self._next_tick_at = beijing_now() + timedelta(seconds=self.scan_interval)
+                
                 if self._is_trading_time():
                     self._tick()
                 else:
                     # 非交易时段：跳过一切操作，10分钟检查一次
                     print("[引擎] 非交易时间，休眠等待")
+                    self._next_tick_at = beijing_now() + timedelta(seconds=600)
                     self._stop_event.wait(600)  # 10分钟
                     continue
             except Exception as e:
@@ -2079,13 +2741,26 @@ class AutonomousTradingEngine:
                 self._buy_date_today = beijing_now().date().isoformat()
                 self._buy_amount_today = 0.0
 
-            if self._is_trading_time():
-                self._comprehensive_trade(db)
-            else:
-                print(f"[引擎] 非交易时间，跳过 AI 决策")
+            if not self._is_real_trading_time():
+                print(f"[引擎] 非真实交易时段：Agent 正常运行分析与决策，真实买卖将被跳过")
+                add_realtime_log("info", "🌙 非真实交易时段：Agent 继续分析决策（仅真实下单被拦截）")
+            self._comprehensive_trade(db)
+
+            # 更新决策时间，并设置下次决策时间
+            self._last_tick_at = beijing_now()
+            self._next_tick_at = self._last_tick_at + timedelta(seconds=self.scan_interval)
 
             # 记录快照（任何时间都执行）
             take_snapshot(db, "auto_tick")
+
+            # 日终反思：14:30 之后自动写入当日总结记忆
+            now = beijing_now()
+            if now.hour == 14 and now.minute >= 30:
+                try:
+                    write_daily_reflection_memory(db)
+                except Exception as e:
+                    print(f"[引擎] 日终反思异常: {e}")
+
             db.commit()
 
         except Exception as e:
@@ -2102,6 +2777,11 @@ class AutonomousTradingEngine:
         acct = get_account(db)
         positions = db.query(PositionModel).filter(PositionModel.qty > 0).all()
         add_realtime_log("info", f"💰 可用现金: ¥{acct.cash:,.2f}, 持仓: {len(positions)}只")
+
+        # ── 真实交易允许标志：仅真实交易时段(或FORCE_TRADING=1)才允许执行真实买卖 ──
+        _allow_real_trade = self._is_real_trading_time() or os.environ.get("FORCE_TRADING") == "1"
+        if not _allow_real_trade:
+            add_realtime_log("info", "📝 非真实交易时段：决策结果将仅记录，不发起真实下单")
 
         # ── 1. 准备持仓上下文（含实时行情+技术指标） ──
         positions_ctx = []
@@ -2151,18 +2831,22 @@ class AutonomousTradingEngine:
             if avails <= 0:
                 continue
 
-            if should_force_exit(pnl_pct, self.stop_loss_pct):
-                add_realtime_log("warning", f"🚨 止损触发: {pos.symbol} {pnl_pct:.1f}% <= -{self.stop_loss_pct:.1f}%")
+            # 极端止损兜底（-20%），防止AI决策失效时的灾难性亏损
+            if pnl_pct <= -20:
+                add_realtime_log("warning", f"🚨 极端止损兜底: {pos.symbol} {pnl_pct:.1f}% <= -20%")
                 result = exec_sell(db, pos.symbol, price, avails,
-                                   reason=f"止损线触发: {pnl_pct:.1f}% <= -{self.stop_loss_pct:.1f}%",
+                                   reason=f"极端止损兜底: {pnl_pct:.1f}% <= -20%",
                                    is_etf=is_etf_code(pos.symbol))
                 if result["ok"]:
-                    add_realtime_log("success", f"✅ 止损卖出: {pos.symbol} @ ¥{price:.2f}")
+                    add_realtime_log("success", f"✅ 极端止损卖出: {pos.symbol} @ ¥{price:.2f}")
                     sold_symbols.add(pos.symbol)
                 continue
 
+            # 正常止盈/止损交给 Agent 决策，此处仅记录供 Agent 参考
             if pnl_pct >= self.take_profit_pct:
-                add_realtime_log("info", f"📌 利润管理区: {pos.symbol} {pnl_pct:.1f}% >= {self.take_profit_pct:.1f}%")
+                add_realtime_log("info", f"📌 利润管理区: {pos.symbol} {pnl_pct:.1f}% >= {self.take_profit_pct:.1f}%（交由Agent决策）")
+            elif pnl_pct <= -self.stop_loss_pct:
+                add_realtime_log("info", f"⚠️ 亏损关注区: {pos.symbol} {pnl_pct:.1f}% <= -{self.stop_loss_pct:.1f}%（交由Agent决策）")
 
             remaining_positions.append(pos)
 
@@ -2216,13 +2900,11 @@ class AutonomousTradingEngine:
         add_realtime_log("info", f"📈 市场情绪: {market_sentiment['sentiment']} (分数: {market_sentiment['score']})")
 
         # ── 4. 账户信息 ──
-        max_buy_amount = min(acct.cash - 1000, 5000)
-        max_buy_amount = max(0, max_buy_amount)
         account_info = {
             "initial_cash": acct.initial_cash,
             "available_cash": acct.cash,
-            "max_buy_amount": max_buy_amount,
-            "max_buy_price": max_buy_amount / 100 if max_buy_amount > 0 else 0,
+            "max_buy_amount": acct.cash - self.min_cash_reserve,
+            "max_buy_price": (acct.cash - self.min_cash_reserve) / 100 if acct.cash > self.min_cash_reserve else 0,
             "current_positions": len(remaining_positions),
             "max_positions": self.max_positions,
             "remaining_capacity": self.max_positions - len(remaining_positions),
@@ -2239,7 +2921,7 @@ class AutonomousTradingEngine:
             engine_params={"max_positions": self.max_positions, "max_position_pct": self.max_position_pct},
             recent_trades=[],
             recent_decisions=[],
-            memory_summary={},
+            memory_summary=recall_recent_agent_memory(db, limit=5),
         )
         decision = run_agent_cycle_with_fallback(db, agent_context)
 
@@ -2279,6 +2961,10 @@ class AutonomousTradingEngine:
                     continue
                 add_realtime_log("ai", f"🤖 AI建议退出 {sym} (信心: {confidence}%)")
                 add_realtime_log("info", f"💡 理由: {reason[:80]}")
+                if not _allow_real_trade:
+                    add_realtime_log("info", f"📝 [非交易时段] 记录退出计划：{sym}，真实下单将在开盘后执行")
+                    log_decision(db, "skip", sym, pos.name, price, score=confidence, reason=f"[非交易时段记录] AI计划退出(信心{confidence}%): {reason[:100]}")
+                    continue
                 result = exec_sell(db, sym, price, avails,
                                    reason=f"AI退出(信心{confidence}%): {reason[:100]}",
                                    is_etf=is_etf_code(sym))
@@ -2287,9 +2973,6 @@ class AutonomousTradingEngine:
                     sold_symbols.add(sym)
                     print(f"[AI] 退出 {sym} {avails}股 @ {price} {reason[:80]}")
             elif action == "reduce":
-                if not allow_reduce_action(current_pct, target_pct):
-                    log_decision(db, "skip", sym, pos.name, price, score=confidence, reason=f"减仓目标无效: 当前{current_pct:.2f}% 目标{target_pct:.2f}%")
-                    continue
                 delta_amount = calc_target_delta_amount(current_pct, target_pct, total_equity)
                 if abs(delta_amount) < price * LOT_SIZE:
                     log_decision(db, "skip", sym, pos.name, price, score=confidence, reason="目标仓位变化不足一手")
@@ -2301,6 +2984,10 @@ class AutonomousTradingEngine:
                     continue
                 add_realtime_log("ai", f"🤖 AI建议减仓 {sym} {qty}股 (信心: {confidence}%)")
                 add_realtime_log("info", f"💡 理由: {reason[:80]}")
+                if not _allow_real_trade:
+                    add_realtime_log("info", f"📝 [非交易时段] 记录减仓计划：{sym} {qty}股，真实下单将在开盘后执行")
+                    log_decision(db, "skip", sym, pos.name, price, score=confidence, reason=f"[非交易时段记录] AI计划减仓{qty}股(信心{confidence}% 目标{target_pct}%): {reason[:100]}")
+                    continue
                 result = exec_sell(db, sym, price, qty,
                                    reason=f"AI减仓(信心{confidence}% 目标{target_pct}%): {reason[:100]}",
                                    is_etf=is_etf_code(sym))
@@ -2316,11 +3003,12 @@ class AutonomousTradingEngine:
                 if qty <= 0:
                     log_decision(db, "skip", sym, pos.name, price, score=confidence, reason="目标仓位变化不足一手")
                     continue
-                if not allow_add_action(pnl_pct, current_pct, target_pct, self.max_position_pct, trend_ok=True):
-                    log_decision(db, "skip", sym, pos.name, price, score=confidence, reason=f"不满足加仓条件: 当前{current_pct:.2f}% 目标{target_pct:.2f}%")
-                    continue
                 add_realtime_log("ai", f"🤖 AI建议加仓 {sym} {qty}股 (信心: {confidence}%)")
                 add_realtime_log("info", f"💡 理由: {reason[:80]}")
+                if not _allow_real_trade:
+                    add_realtime_log("info", f"📝 [非交易时段] 记录加仓计划：{sym} {qty}股，真实下单将在开盘后执行")
+                    log_decision(db, "skip", sym, pos.name, price, score=confidence, reason=f"[非交易时段记录] AI计划加仓{qty}股(信心{confidence}% 目标{target_pct}%): {reason[:100]}")
+                    continue
                 result = exec_buy(db, sym, pos.name, price, qty,
                                   stop_loss=pos.stop_loss, reason=f"AI加仓(信心{confidence}% 目标{target_pct}%): {reason[:100]}",
                                   score=confidence, is_etf=is_etf_code(sym))
@@ -2384,16 +3072,10 @@ class AutonomousTradingEngine:
                 log_decision(db, "skip", sym, name, price, reason=f"买不起1手: ¥{one_hand_cost:.0f} > 现金¥{acct.cash:.0f}")
                 continue
 
-            # 计算仓位
-            risk_per_share = price - sl
-            if risk_per_share <= 0:
-                log_decision(db, "skip", sym, name, price, reason=f"风险收益比不合理: 价格¥{price:.2f} 止损¥{sl:.2f}")
-                continue
-            risk_budget = self.initial_cash * (self.risk_per_trade_pct / 100)
-            qty_by_risk = int(risk_budget / risk_per_share)
+            # 计算仓位：信任 Agent 决策，仅受现金和单笔上限约束
             qty_by_amount = int(self.single_buy_max / price)
             qty_by_cash = int((acct.cash - self.min_cash_reserve) / price)
-            qty = round_lot(min(qty_by_risk, qty_by_amount, qty_by_cash))
+            qty = round_lot(min(qty_by_amount, qty_by_cash))
             if qty <= 0:
                 log_decision(db, "skip", sym, name, price, reason=f"计算股数为0")
                 continue
@@ -2412,6 +3094,10 @@ class AutonomousTradingEngine:
 
             add_realtime_log("ai", f"🚀 AI综合决策买入 {sym} {name} (信心{confidence}%)")
             reason_str = f"AI决策(信心{confidence}%): {reason[:100]}"
+            if not _allow_real_trade:
+                add_realtime_log("info", f"📝 [非交易时段] 记录开仓计划：{sym} {name} {qty}股，真实下单将在开盘后执行")
+                log_decision(db, "skip", sym, name, price, score=confidence, reason=f"[非交易时段记录] AI计划开仓{qty}股(信心{confidence}%): {reason[:100]}")
+                continue
             result = exec_buy(db, sym, name, price, qty, stop_loss=sl, reason=reason_str, score=confidence, is_etf=is_etf)
             if result["ok"]:
                 self._buy_amount_today += gross
@@ -2419,328 +3105,10 @@ class AutonomousTradingEngine:
                 add_realtime_log("success", f"✅ 买入成功: {sym} {name} {qty}股 @ ¥{price:.2f}")
                 add_realtime_log("info", f"💡 AI理由: {reason[:80]}")
                 print(f"[AI] 买入 {sym} {name} {qty}股 @ {price} 止损{sl} AI信心{confidence}%")
-                break  # 每轮只开一笔
 
         if not bought_this_round:
             log_decision(db, "hold", reason=f"综合决策本轮未买入 ({len(buy_picks)}只候选均被过滤)")
 
-
-    def _can_open_new_positions(self, db: Session) -> bool:
-        """检查是否可以开新仓"""
-        acct = get_account(db)
-        open_count = db.query(PositionModel).filter(PositionModel.qty > 0).count()
-
-        # 持仓数上限
-        if open_count >= self.max_positions:
-            log_decision(db, "hold", reason=f"持仓已满 ({open_count}/{self.max_positions})，等待平仓")
-            return False
-
-        # 现金充足（至少能买1手均价20块的股票）
-        if acct.cash < 2000:
-            log_decision(db, "hold", reason="现金不足")
-            return False
-
-        # 每日买入限额
-        if self._buy_amount_today >= self.max_buy_per_day:
-            log_decision(db, "hold", reason=f"今日买入已达限额 (已买: ¥{self._buy_amount_today:,.0f} / 限额: ¥{self.max_buy_per_day:,.0f})")
-            add_realtime_log("warning", f"⚠️ 今日买入已达限额: ¥{self._buy_amount_today:,.0f} / ¥{self.max_buy_per_day:,.0f}")
-            return False
-
-        return True
-
-    def _scan_and_buy(self, db: Session):
-        """让 AI 扫描市场并决定买入"""
-        add_realtime_log("info", "🔍 开始扫描全市场数据...")
-        log_decision(db, "scan", reason="AI正在分析全市场数据...")
-
-        # ★ 重要：先获取账户信息，显示可用现金
-        acct = get_account(db)
-        add_realtime_log("info", f"💰 当前可用现金: ¥{acct.cash:,.2f}")
-        add_realtime_log("info", f"📊 最大可买金额: ¥{min(acct.cash - 1000, 5000):,.0f} (保留¥1,000)")
-
-        existing_symbols = set()
-        for p in db.query(PositionModel).filter(PositionModel.qty > 0).all():
-            existing_symbols.add(p.symbol)
-
-        add_realtime_log("info", "📊 正在获取A股实时行情...")
-        all_stocks = fetch_all_stocks()
-        if not all_stocks:
-            add_realtime_log("error", "❌ 无法获取市场数据，请检查网络连接")
-            log_decision(db, "scan", reason="无法获取市场数据")
-            return
-        add_realtime_log("success", f"✅ 成功获取 {len(all_stocks)} 只股票行情")
-
-        portfolio_rows = []
-        for pos in db.query(PositionModel).filter(PositionModel.qty > 0).all():
-            q = fetch_quote(pos.symbol)
-            price = q["price"] if q else pos.last_price
-            portfolio_rows.append({
-                "symbol": pos.symbol, "name": pos.name, "qty": pos.qty,
-                "avg_cost": pos.avg_cost, "current_price": price,
-                "pnl_pct": round((price / pos.avg_cost - 1) * 100, 2) if price and pos.avg_cost else 0,
-                "stop_loss": pos.stop_loss, "buy_reason": pos.buy_reason,
-            })
-
-        # 计算可买金额范围
-        max_buy_amount = min(acct.cash - 1000, 5000)  # 保留1000元，单笔最多5000
-        max_buy_amount = max(0, max_buy_amount)
-
-        account_info = {
-            "initial_cash": acct.initial_cash,
-            "available_cash": acct.cash,
-            "max_buy_amount": max_buy_amount,
-            "max_buy_price": max_buy_amount / 100,  # 股票最高价格
-            "current_positions": len(portfolio_rows),
-            "max_positions": self.max_positions,
-            "remaining_capacity": self.max_positions - len(portfolio_rows),
-        }
-
-        # AI 扫描市场
-        add_realtime_log("ai", "🤖 正在调用DeepSeek AI分析全市场数据...")
-        add_realtime_log("info", f"📋 当前持仓: {len(portfolio_rows)}只")
-        add_realtime_log("info", f"💰 可用资金: ¥{acct.cash:,.0f}, 最大可买: ¥{max_buy_amount:,.0f}")
-        add_realtime_log("info", f"📊 股票价格上限: ¥{max_buy_amount/100:.0f} (确保买得起1手)")
-        scan_result = ai_daily_market_scan(all_stocks, portfolio_rows, account_info)
-        picks = scan_result.get("top_picks", [])
-        market_analysis = scan_result.get("market_analysis", "")
-        risk_level = scan_result.get("risk_level", "mid")
-
-        if market_analysis:
-            add_realtime_log("ai", f"📈 市场分析: {market_analysis[:150]}...")
-        add_realtime_log("info", f"⚡ 市场风险等级: {risk_level}")
-
-        if not picks:
-            analysis = scan_result.get("market_analysis", "AI未找到合适标的")[:300]
-            add_realtime_log("warning", f"⏸️ AI建议观望: {analysis[:100]}")
-            log_decision(db, "scan", reason=f"AI建议观望: {analysis}")
-            return
-        add_realtime_log("success", f"🎯 AI选出 {len(picks)} 只候选股票")
-
-        log_decision(db, "scan", reason=f"AI选出{len(picks)}只候选: {','.join(p['symbol'] for p in picks[:3])}",
-                     detail=json.dumps(scan_result, ensure_ascii=False)[:500])
-
-        # 对每只 AI 推荐逐一决策
-        bought_this_round = False
-        for i, pick in enumerate(picks):
-            sym = normalize_symbol(pick.get("symbol", ""))
-            if not sym or sym in existing_symbols:
-                continue
-            if self._buy_amount_today >= self.max_buy_per_day:
-                add_realtime_log("warning", f"⚠️ 已达每日买入限额 ¥{self.max_buy_per_day:,.0f}")
-                break
-
-            name = pick.get("name", sym)
-            entry = pick.get("entry_price", 0) or 0
-            sl = pick.get("stop_loss", 0) or 0
-            confidence = pick.get("confidence", 0)
-            reason = pick.get("reason", "AI推荐")
-
-            add_realtime_log("ai", f"🔍 正在分析第 {i+1} 只: {sym} {name} (AI信心: {confidence}%)")
-
-            # 获取实时价格
-            quote = fetch_quote(sym)
-            if not quote:
-                add_realtime_log("warning", f"⚠️ 无法获取 {sym} 行情，跳过")
-                log_decision(db, "skip", sym, name, 0, reason=f"无法获取实时行情")
-                continue
-            price = quote["price"]
-            is_etf = is_etf_code(sym)
-            if sl == 0:
-                sl = round(price * 0.95, 3)  # 默认止损5%（激进型）
-
-            add_realtime_log("info", f"💰 {sym} 当前价: ¥{price:.2f}, 止损位: ¥{sl:.2f}, 类型: {'ETF' if is_etf else '股票'}")
-
-            # ★ 硬性检查：买不买得起1手（100股+手续费）
-            one_hand_cost = round(price * 100 * 1.01, 2)
-            if one_hand_cost > acct.cash:
-                add_realtime_log("warning", f"❌ {sym} 买不起1手: ¥{one_hand_cost:.0f} > 可用现金 ¥{acct.cash:.0f}")
-                log_decision(db, "skip", sym, name, price,
-                             reason=f"买不起1手: {price}×100≈¥{one_hand_cost:.0f} > 现金¥{acct.cash:.0f}")
-                continue
-
-            # 计算仓位（优化：适合1万元小资金，单笔3000-5000元）
-            add_realtime_log("info", f"📐 正在计算仓位...")
-            risk_per_share = price - sl
-            if risk_per_share <= 0:
-                add_realtime_log("warning", f"⚠️ {sym} 风险收益比不合理，跳过")
-                log_decision(db, "skip", sym, name, price, reason=f"风险收益比不合理: 价格¥{price:.2f} 止损¥{sl:.2f} 价差≤0")
-                continue
-
-            # 风险预算（总资金的2%，即200元）
-            risk_budget = self.initial_cash * (self.risk_per_trade_pct / 100)
-            qty_by_risk = int(risk_budget / risk_per_share)
-
-            # 按单笔金额限制（3000-5000元）
-            qty_by_amount = int(self.single_buy_max / price)
-
-            # 按可用现金计算（保留1000元）
-            available = acct.cash - self.min_cash_reserve
-            qty_by_cash = int(available / price)
-
-            # 取最小值
-            qty = round_lot(min(qty_by_risk, qty_by_amount, qty_by_cash))
-
-            if qty <= 0:
-                add_realtime_log("warning", f"⚠️ {sym} 计算股数为0，跳过")
-                log_decision(db, "skip", sym, name, price,
-                             reason=f"计算股数为0: 风险股数{qty_by_risk}/金额股数{qty_by_amount}/现金股数{qty_by_cash}")
-                continue
-
-            gross = qty * price
-
-            # 检查单笔金额是否达到最低要求
-            if gross < self.single_buy_min:
-                add_realtime_log("warning", f"⚠️ {sym} 买入金额 ¥{gross:,.0f} < 最低 ¥{self.single_buy_min:,.0f}，跳过")
-                log_decision(db, "skip", sym, name, price,
-                             reason=f"买入金额不足: ¥{gross:,.0f} < 最低¥{self.single_buy_min:,.0f} ({qty}股×¥{price:.2f})")
-                continue
-
-            add_realtime_log("info", f"📊 计划买入: {qty}股 × ¥{price:.2f} = ¥{gross:,.0f}")
-
-            # 计算手续费（ETF免印花税）
-            fee = fee_for_trade(gross, "buy", is_etf=is_etf)
-            if gross + fee > acct.cash:
-                add_realtime_log("warning", f"❌ {sym} 资金不足，需要 ¥{gross:,.0f}，可用 ¥{acct.cash:.0f}")
-                log_decision(db, "skip", sym, name, price,
-                             reason=f"资金不足: 需¥{gross+fee:,.0f}(含手续费¥{fee:.0f}) > 现金¥{acct.cash:,.0f}")
-                continue
-            if self._buy_amount_today + gross > self.max_buy_per_day:
-                add_realtime_log("warning", f"⚠️ 超过每日买入限额 (今日已买: ¥{self._buy_amount_today:,.0f} + 本次: ¥{gross:,.0f} > 限额: ¥{self.max_buy_per_day:,.0f})")
-                log_decision(db, "skip", sym, name, price,
-                             reason=f"超每日买入限额: 今日已买¥{self._buy_amount_today:,.0f}+本次¥{gross:,.0f} > 限额¥{self.max_buy_per_day:,.0f}")
-                continue
-
-            add_realtime_log("ai", f"🚀 AI决策买入 {sym} {name}...")
-            reason_str = f"AI决策(信心{confidence}%): {reason[:100]}"
-            result = exec_buy(db, sym, name, price, qty,
-                              stop_loss=sl, reason=reason_str, score=confidence, is_etf=is_etf)
-            if result["ok"]:
-                self._buy_amount_today += gross
-                bought_this_round = True
-                add_realtime_log("success", f"✅ 买入成功: {sym} {name} {qty}股 @ ¥{price:.2f}")
-                add_realtime_log("info", f"💡 AI理由: {reason[:80]}")
-                print(f"[AI] 买入 {sym} {name} {qty}股 @ {price} 止损{sl} AI信心{confidence}%")
-                print(f"    理由: {reason[:120]}")
-                existing_symbols.add(sym)
-                break  # 每轮只开一笔
-
-        # 本轮扫描结束，未买入时记录原因
-        if not bought_this_round and picks:
-            log_decision(db, "hold", reason=f"本轮扫描{len(picks)}只候选均未买入（已被过滤或条件不满足，详见上方skip记录）")
-            add_realtime_log("warning", f"⏸️ 本轮{len(picks)}只候选均未成功买入")
-
-    def _manage_positions(self, db: Session):
-        """AI 管理持仓：决定止盈、止损或继续持有"""
-        positions = db.query(PositionModel).filter(PositionModel.qty > 0).all()
-        if not positions:
-            return
-
-        add_realtime_log("info", f"📊 正在检查 {len(positions)} 只持仓...")
-        for pos in positions:
-            try:
-                quote = fetch_quote(pos.symbol)
-                if not quote:
-                    add_realtime_log("warning", f"⚠️ 无法获取 {pos.symbol} 行情")
-                    continue
-                price = quote["price"]
-                pos.last_price = price
-                avg_cost = pos.avg_cost
-                pnl_pct = (price / avg_cost - 1) * 100
-                avails = calc_available_to_sell(db, pos.symbol)
-                if avails <= 0:
-                    continue
-
-                pnl_emoji = "🟢" if pnl_pct >= 0 else "🔴"
-                add_realtime_log("info", f"{pnl_emoji} {pos.symbol} {pos.name}: ¥{price:.2f} ({pnl_pct:+.2f}%)")
-
-                # 先执行页面展示的硬性风控参数，保证模拟规则清晰一致
-                if pnl_pct <= -self.stop_loss_pct:
-                    add_realtime_log("warning", f"🚨 止损触发: {pos.symbol} {pnl_pct:.1f}% <= -{self.stop_loss_pct:.1f}%")
-                    result = exec_sell(db, pos.symbol, price, avails,
-                                       reason=f"止损线触发: {pnl_pct:.1f}% <= -{self.stop_loss_pct:.1f}%",
-                                       is_etf=is_etf_code(pos.symbol))
-                    if result["ok"]:
-                        add_realtime_log("success", f"✅ 止损卖出成功: {pos.symbol} @ ¥{price:.2f}")
-                        print(f"[规则] 止损卖出 {pos.symbol} @ {price}")
-                    continue
-
-                if pnl_pct >= self.take_profit_pct:
-                    add_realtime_log("success", f"🎉 止盈触发: {pos.symbol} {pnl_pct:.1f}% >= {self.take_profit_pct:.1f}%")
-                    result = exec_sell(db, pos.symbol, price, avails,
-                                       reason=f"止盈线触发: {pnl_pct:.1f}% >= {self.take_profit_pct:.1f}%",
-                                       is_etf=is_etf_code(pos.symbol))
-                    if result["ok"]:
-                        add_realtime_log("success", f"✅ 止盈卖出成功: {pos.symbol} @ ¥{price:.2f}")
-                        print(f"[规则] 止盈卖出 {pos.symbol} @ {price}")
-                    continue
-
-                # 收集持仓上下文给 AI 决策
-                pos_context = {
-                    "symbol": pos.symbol,
-                    "name": pos.name,
-                    "buy_price": avg_cost,
-                    "current_price": price,
-                    "pnl_pct": round(pnl_pct, 2),
-                    "qty": pos.qty,
-                    "available_to_sell": avails,
-                    "stop_loss": pos.stop_loss,
-                    "buy_reason": pos.buy_reason,
-                    "days_held": (beijing_now().date() - (db.query(LotModel).filter(
-                        LotModel.symbol == pos.symbol, LotModel.remaining > 0
-                    ).first().buy_date if db.query(LotModel).filter(
-                        LotModel.symbol == pos.symbol, LotModel.remaining > 0
-                    ).first() else beijing_now().date())).days,
-                }
-
-                # 获取历史数据
-                hist = fetch_history(pos.symbol, days=20)
-                if hist:
-                    pos_context["recent_5d"] = hist[-5:]
-                    pos_context["recent_high_10d"] = max(h["high"] for h in hist[-10:])
-                    pos_context["recent_low_10d"] = min(h["low"] for h in hist[-10:])
-
-                # AI 决策：是否卖出
-                add_realtime_log("ai", f"🤖 AI正在分析 {pos.symbol} 是否卖出...")
-                decision = ai_decide_trade("sell", {
-                    "position": pos_context,
-                    "account_cash": get_account(db).cash,
-                    "total_positions": len(positions),
-                })
-
-                ai_action = decision.get("action", "hold")
-                ai_reason = decision.get("reason", "")
-                ai_confidence = decision.get("confidence", 0)
-
-                if ai_action == "sell" and ai_confidence >= 60:
-                    add_realtime_log("ai", f"🤖 AI建议卖出 {pos.symbol} (信心: {ai_confidence}%)")
-                    add_realtime_log("info", f"💡 理由: {ai_reason[:80]}")
-                    result = exec_sell(db, pos.symbol, price, avails,
-                                       reason=f"AI卖出(信心{ai_confidence}%): {ai_reason[:100]}",
-                                       is_etf=is_etf_code(pos.symbol))
-                    if result["ok"]:
-                        add_realtime_log("success", f"✅ AI卖出成功: {pos.symbol} @ ¥{price:.2f}")
-                        print(f"[AI] 卖出 {pos.symbol} {avails}股 @ {price} {ai_reason[:80]}")
-                    continue
-                else:
-                    add_realtime_log("info", f"🤖 AI建议继续持有 {pos.symbol} (信心: {ai_confidence}%)")
-
-                # 回退：硬止损保护（AI 失效时的保险）
-                if pnl_pct <= -self.stop_loss_pct:
-                    result = exec_sell(db, pos.symbol, price, avails,
-                                       reason=f"硬止损触发: {pnl_pct:.1f}% <= -{self.stop_loss_pct:.1f}% (AI决策回退)",
-                                       is_etf=is_etf_code(pos.symbol))
-                    if result["ok"]:
-                        print(f"[AI] 硬止损 {pos.symbol} @ {price}")
-                    continue
-
-                # 记录 AI 的持有判断
-                if pnl_pct >= 3 and ai_action == "hold":
-                    log_decision(db, "hold", pos.symbol, pos.name, price,
-                                 score=ai_confidence, reason=f"AI建议继续持有: {ai_reason[:150]}")
-
-            except Exception as e:
-                print(f"[AI] 持仓管理异常 {pos.symbol}: {e}")
-        db.commit()
 
 engine = AutonomousTradingEngine()
 
@@ -2835,6 +3203,7 @@ def api_engine_status():
         "min_score_to_buy": engine.min_score_to_buy,
         "ai_model": "DeepSeek " + DEEPSEEK_MODEL,
         "ai_configured": bool(DEEPSEEK_API_KEY),
+        "force_decision_mode": engine._force_decision_mode,
     }
 
 @app.post("/api/engine/start")
@@ -2846,6 +3215,14 @@ def api_engine_start():
 def api_engine_stop():
     engine.stop()
     return {"ok": True}
+
+@app.post("/api/engine/toggle-force-mode")
+def api_engine_toggle_force_mode():
+    """切换界面持续运行模式（仅控制轮询频率/状态显示，真实买卖仍严格按A股交易时间执行）"""
+    engine._force_decision_mode = not engine._force_decision_mode
+    mode_str = "开启" if engine._force_decision_mode else "关闭"
+    print(f"[引擎] 界面持续运行模式已{mode_str}（真实买卖始终按交易时间执行）")
+    return {"ok": True, "force_decision_mode": engine._force_decision_mode}
 
 # ── API: 持仓 ──
 @app.get("/api/portfolio")
@@ -2949,132 +3326,18 @@ def api_equity_curve(limit: int = 500):
         snaps.reverse()
         return [{"time": s.time.strftime("%m-%d %H:%M"), "equity": s.equity} for s in snaps]
 
-# ── API: 当前AI选股推荐（带缓存，非交易时间不调 AI） ──
+# ── API: Agent 选股推荐（统一决策源）──
 @app.get("/api/picks")
 def api_picks():
-    global _picks_cache
-
-    # 非交易时间：直接返回缓存（不调 AI）
-    if not is_trading_hours():
-        if _picks_cache["data"]:
-            print("[picks] 非交易时间，返回缓存数据")
-            return _picks_cache["data"]
-        print("[picks] 非交易时间，无缓存，跳过 AI 调用")
-        return []
-
-    # 交易时间内：检查缓存是否新鲜（5分钟内）
-    if _picks_cache["time"]:
-        age = (beijing_now() - _picks_cache["time"]).total_seconds()
-        if age < PICKS_CACHE_TTL:
-            print(f"[picks] 缓存有效（{age:.0f}s 前），跳过 AI 调用")
-            return _picks_cache["data"]
-
-    try:
-        all_stocks = fetch_all_stocks()
-        if not all_stocks:
-            return _picks_cache["data"] if _picks_cache["data"] else []
-        candidates = sorted(all_stocks, key=lambda s: s.get("amount", 0), reverse=True)[:50]
-        enriched = []
-        fin_data = fetch_financial_batch()  # 获取全市场财务数据（有缓存）
-        for s in candidates[:20]:
-            hist = fetch_history(s["symbol"], days=15)
-            if hist:
-                s["ma5"] = round(float(np.mean([h["close"] for h in hist[-5:]])), 2)
-                s["recent_high"] = max(h["high"] for h in hist[-10:])
-                s["recent_low"] = min(h["low"] for h in hist[-10:])
-            # 获取估值指标（仅股票）
-            if not is_etf_code(s["symbol"]):
-                try:
-                    val = fetch_valuation(s["symbol"])
-                    if val:
-                        s["pe"] = val.get("pe")
-                        s["pb"] = val.get("pb")
-                        s["total_mv"] = val.get("total_mv")
-                except Exception:
-                    pass
-            # 附加财务摘要
-            fin = fin_data.get(s["symbol"], {})
-            if fin:
-                s["net_profit_yoy"] = fin.get("net_profit_yoy")
-                s["revenue_yoy"] = fin.get("revenue_yoy")
-                s["eps"] = fin.get("eps")
-            enriched.append(s)
-        result = ai_daily_market_scan(enriched, [], {
-            "initial_cash": 100000,
-            "available_cash": 100000,
-            "current_positions": 0,
-            "max_positions": 5,
-            "max_buy_amount": 99000,
-            "max_buy_price": 990
-        })
-        picks = result.get("top_picks", [])
-        # 构建 picks 到 enriched 的索引，方便查找财务数据
-        enriched_map = {s["symbol"]: s for s in enriched}
-        data = [{
-            "symbol": p.get("symbol", ""), "name": p.get("name", ""),
-            "price": p.get("entry_price", 0),
-            "confidence": p.get("confidence", 0),
-            "score": p.get("confidence", 0),
-            "reason": p.get("reason", "")[:100],
-            "reasons": [p.get("reason", "")[:100]] if p.get("reason") else [],
-            "pct": 0,
-            "amount": 0,
-            "stop_loss": p.get("stop_loss", ""), "target": p.get("target_price", ""),
-            # 财务字段
-            "pe": enriched_map.get(p.get("symbol", ""), {}).get("pe"),
-            "pb": enriched_map.get(p.get("symbol", ""), {}).get("pb"),
-            "net_profit_yoy": enriched_map.get(p.get("symbol", ""), {}).get("net_profit_yoy"),
-            "revenue_yoy": enriched_map.get(p.get("symbol", ""), {}).get("revenue_yoy"),
-        } for p in picks] if picks else []
-
-        # 更新缓存
-        _picks_cache = {"data": data, "time": beijing_now()}
-        return data
-    except Exception as e:
-        # 出错时也返回缓存
-        if _picks_cache["data"]:
-            print(f"[picks] AI 调用失败 ({e})，返回缓存")
-            return _picks_cache["data"]
-        return [{"symbol": "error", "name": str(e), "price": 0, "confidence": 0, "reason": "AI选股临时不可用"}]
+    """返回 Agent 最新一次决策周期的选股推荐。"""
+    return _agent_picks_cache.get("data", [])
 
 
-# ── API: AI 智能推荐（不受资金限制） ──
+# ── API: Agent 智能推荐（统一决策源）──
 @app.get("/api/recommendations")
 def api_recommendations(budget: Optional[float] = None):
-    """AI 智能推荐：budget 为可用资金（元），None 表示不限"""
-    try:
-        all_stocks = fetch_all_stocks()
-        if not all_stocks:
-            return []
-        recommendations = ai_recommend_stocks(all_stocks, budget=budget)
-        if not recommendations:
-            return []
-        # 获取推荐股票的实时行情
-        result = []
-        for r in recommendations:
-            symbol = r.get("symbol", "")
-            quote = fetch_quote(symbol) if symbol else None
-            result.append({
-                "symbol": symbol,
-                "name": r.get("name", ""),
-                "price": quote["price"] if quote else r.get("entry_price", 0),
-                "pct": quote.get("pct", 0) if quote else 0,
-                "confidence": r.get("confidence", 0),
-                "reason": r.get("reason", "")[:50],
-                "reason_detail": r.get("reason_detail", ""),
-                "kind": r.get("kind", "stock"),
-                "stop_loss": r.get("stop_loss", ""),
-                "target_price": r.get("target_price", ""),
-                # 财务字段从 enriched 数据中获取（如果有）
-                "pe": r.get("pe"),
-                "pb": r.get("pb"),
-                "net_profit_yoy": r.get("net_profit_yoy"),
-                "revenue_yoy": r.get("revenue_yoy"),
-            })
-        return result
-    except Exception as e:
-        add_realtime_log("error", f"AI推荐接口异常: {e}")
-        return []
+    """返回 Agent 最新选股推荐（与 /api/picks 同源）。"""
+    return _agent_picks_cache.get("data", [])
 
 
 # ── API: 宠物数据 ──
@@ -3128,6 +3391,47 @@ def api_pet_stats():
             "wins": 0, "equity": 10000, "initial_cash": 10000,
             "positions_count": 0, "error": str(e)
         }
+
+
+@app.get("/api/agent/status")
+def api_agent_status():
+    """返回 Agent 当前实时执行状态。"""
+    with _agent_status_lock:
+        result = dict(_agent_live_status)
+    # 添加引擎决策时间信息
+    result["engine_running"] = engine.is_running
+    result["force_decision_mode"] = engine._force_decision_mode
+    result["real_trading_hours"] = engine._is_real_trading_time()  # 真实交易时间：最终买卖校验的依据
+    result["last_tick_at"] = engine._last_tick_at.strftime("%Y-%m-%d %H:%M:%S") if engine._last_tick_at else ""
+    result["next_tick_at"] = engine._next_tick_at.strftime("%Y-%m-%d %H:%M:%S") if engine._next_tick_at else ""
+    result["scan_interval"] = engine.scan_interval
+    
+    # 计算剩余秒数
+    if not engine.is_running:
+        # 引擎已停止
+        result["next_tick_remaining"] = -1
+        result["tick_status"] = "stopped"
+    elif engine._force_decision_mode:
+        # 界面持续运行模式：始终显示倒计时，真实买卖由 real_trading_hours 决定
+        if engine._next_tick_at:
+            remaining = (engine._next_tick_at - beijing_now()).total_seconds()
+            result["next_tick_remaining"] = max(0, int(remaining))
+        else:
+            result["next_tick_remaining"] = engine.scan_interval
+        result["tick_status"] = "forced"
+    elif engine._is_real_trading_time():
+        # 真实交易时间：正常倒计时
+        if engine._next_tick_at:
+            remaining = (engine._next_tick_at - beijing_now()).total_seconds()
+            result["next_tick_remaining"] = max(0, int(remaining))
+        else:
+            result["next_tick_remaining"] = engine.scan_interval
+        result["tick_status"] = "trading"
+    else:
+        # 非交易时间且非界面持续模式：休市状态
+        result["next_tick_remaining"] = -2  # -2 表示休市
+        result["tick_status"] = "closed"
+    return result
 
 
 @app.get("/api/agent/cycles")

@@ -207,54 +207,33 @@ def test_recall_recent_agent_memory_handles_malformed_json_and_aggregates_notes(
 
 
 def test_run_trading_agent_cycle_returns_valid_plan(sample_context, monkeypatch):
-    monkeypatch.setattr(web_app, "run_market_analysis_node", lambda state: {
-        "market_assessment": {
-            "regime": "defensive",
-            "sentiment_score": 48,
-            "risk_bias": "conservative",
-            "sector_focus": ["ETF"],
-            "warnings": ["高位分歧扩大"],
-            "reasoning": "防守优先",
-        }
-    })
-    monkeypatch.setattr(web_app, "run_position_review_node", lambda state: {
-        "position_assessments": [
-            {
-                "symbol": "600000",
-                "action": "hold",
-                "target_pct": 18,
-                "confidence": 0.72,
-                "thesis": "趋势未破",
-                "risks": [],
-                "supports": ["量能稳定"],
-            }
-        ]
-    })
-    monkeypatch.setattr(web_app, "run_candidate_research_node", lambda state: {
-        "candidate_assessments": []
-    })
-    monkeypatch.setattr(web_app, "run_risk_review_node", lambda state: {
-        "risk_review": {
-            "overall_pass": True,
-            "risk_level": "medium",
-            "blocked_actions": [],
-            "adjustments": [],
-            "notes": ["保留现金"],
-        }
-    })
-    monkeypatch.setattr(web_app, "run_decision_synthesizer_node", lambda state: {
-        "final_plan": {
-            "cycle_id": state["context"]["cycle_id"],
-            "position_actions": [{"symbol": "600000", "action": "hold", "target_pct": 18}],
-            "new_entries": [],
-            "buy_picks": [],
-            "portfolio_bias": "balanced",
-            "cash_reserve_target": 0.35,
-            "summary": "防守模式，继续持有",
-            "confidence": 0.74,
-            "risk_level": "medium",
-        }
-    })
+    # Mock _make_tracked_node to pass through raw functions (no status tracking in tests)
+    monkeypatch.setattr(web_app, "_make_tracked_node", lambda name, fn: fn)
+    # Mock ai_call to return predictable JSON for each sub-agent
+    call_count = [0]
+    ai_responses = [
+        # market analyst
+        json.dumps({"regime": "defensive", "risk_bias": "conservative",
+                    "reasoning": "防守优先", "sector_focus": ["ETF"], "warnings": ["高位分歧扩大"]}),
+        # position review
+        json.dumps({"assessments": [{"symbol": "600000", "action": "hold", "target_pct": 18,
+                    "confidence": 72, "thesis": "趋势未破", "risks": [], "supports": ["量能稳定"]}]}),
+        # candidate research
+        json.dumps({"assessments": [], "reasoning": "无合适候选"}),
+        # risk review
+        json.dumps({"overall_pass": True, "risk_level": "medium", "blocked_actions": [],
+                    "adjustments": [], "notes": ["保留现金"], "reasoning": "风控通过"}),
+        # synthesizer
+        json.dumps({"market_analysis": "防守模式", "risk_level": "medium", "portfolio_bias": "balanced",
+                    "cash_reserve_target": 0.35, "confidence": 0.74, "summary": "防守模式，继续持有",
+                    "position_actions": [{"symbol": "600000", "action": "hold", "target_pct": 18}],
+                    "buy_picks": [], "reasoning": ["防守优先"]}),
+    ]
+    def mock_ai_call(messages, **kwargs):
+        idx = call_count[0]
+        call_count[0] += 1
+        return ai_responses[idx] if idx < len(ai_responses) else "{}"
+    monkeypatch.setattr(web_app, "ai_call", mock_ai_call)
 
     plan = web_app.run_trading_agent_cycle(sample_context)
     assert plan["portfolio_bias"] == "balanced"
@@ -262,8 +241,12 @@ def test_run_trading_agent_cycle_returns_valid_plan(sample_context, monkeypatch)
     assert plan["risk_level"] == "medium"
 
 
-def test_run_market_analysis_node_bullish(sample_context):
+def test_run_market_analysis_node_bullish(monkeypatch, sample_context):
     sample_context["market_snapshot"]["score"] = 75
+    monkeypatch.setattr(web_app, "ai_call", lambda msgs, **kw: json.dumps({
+        "regime": "bullish", "risk_bias": "aggressive",
+        "reasoning": "市场看涨", "sector_focus": [], "warnings": []
+    }))
     state = {"context": sample_context}
     result = web_app.run_market_analysis_node(state)
     assessment = result["market_assessment"]
@@ -271,8 +254,12 @@ def test_run_market_analysis_node_bullish(sample_context):
     assert assessment["risk_bias"] == "aggressive"
 
 
-def test_run_market_analysis_node_defensive(sample_context):
+def test_run_market_analysis_node_defensive(monkeypatch, sample_context):
     sample_context["market_snapshot"]["score"] = 40
+    monkeypatch.setattr(web_app, "ai_call", lambda msgs, **kw: json.dumps({
+        "regime": "defensive", "risk_bias": "conservative",
+        "reasoning": "市场防御", "sector_focus": [], "warnings": ["风险高"]
+    }))
     state = {"context": sample_context}
     result = web_app.run_market_analysis_node(state)
     assessment = result["market_assessment"]
@@ -280,8 +267,12 @@ def test_run_market_analysis_node_defensive(sample_context):
     assert assessment["risk_bias"] == "conservative"
 
 
-def test_run_market_analysis_node_neutral(sample_context):
+def test_run_market_analysis_node_neutral(monkeypatch, sample_context):
     sample_context["market_snapshot"]["score"] = 55
+    monkeypatch.setattr(web_app, "ai_call", lambda msgs, **kw: json.dumps({
+        "regime": "neutral", "risk_bias": "balanced",
+        "reasoning": "市场中性", "sector_focus": [], "warnings": []
+    }))
     state = {"context": sample_context}
     result = web_app.run_market_analysis_node(state)
     assessment = result["market_assessment"]
@@ -373,6 +364,8 @@ def test_run_agent_cycle_with_fallback_success_path(monkeypatch, db, sample_cont
         "confidence": 0.7,
     }
     monkeypatch.setattr(web_app, "run_trading_agent_cycle", lambda ctx: expected_plan)
+    monkeypatch.setattr(web_app, "log_agent_cycle", lambda *a, **kw: None)
+    monkeypatch.setattr(web_app, "store_agent_memory", lambda *a, **kw: None)
 
     result = web_app.run_agent_cycle_with_fallback(db, sample_context)
     assert result["market_analysis"] == "Agent 分析完毕"

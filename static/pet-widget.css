@@ -20,98 +20,270 @@
 .pet-hamster {
   width: 100px;
   height: 100px;
-  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --pet-size: 1;
   transform-origin: bottom center;
+  position: relative;
 }
 
-/* 胖瘦缩放 */
-.pet-hamster.fat { transform: scale(1.2); }
-.pet-hamster.normal { transform: scale(1); }
-.pet-hamster.thin { transform: scale(0.85); }
-.pet-hamster.very-thin { transform: scale(0.7); }
-.pet-hamster.very-fat { transform: scale(1.35); }
+/* 胖瘦缩放：通过变量叠加到动作动画，避免 transform 互相覆盖 */
+.pet-hamster.fat { --pet-size: 1.2; }
+.pet-hamster.normal { --pet-size: 1; }
+.pet-hamster.thin { --pet-size: 0.85; }
+.pet-hamster.very-thin { --pet-size: 0.7; }
+.pet-hamster.very-fat { --pet-size: 1.35; }
 
-/* 闲置呼吸动画 */
+/* ═══ 基础动画 ═══ */
+
 @keyframes pet-breathe {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-3px) scale(1.02); }
+  0%, 100% { transform: translateY(0) scale(var(--pet-size)); }
+  50% { transform: translateY(-4px) scale(calc(var(--pet-size) * 1.03)); }
 }
-.pet-hamster.idle {
-  animation: pet-breathe 3s ease-in-out infinite;
-}
+.pet-hamster.idle { animation: pet-breathe 3s ease-in-out infinite; }
 
-/* 开心弹跳 */
 @keyframes pet-bounce {
-  0%, 100% { transform: translateY(0) scale(1); }
-  30% { transform: translateY(-15px) scale(1.05); }
-  60% { transform: translateY(-5px) scale(0.98); }
+  0%, 100% { transform: translateY(0) scale(var(--pet-size)); }
+  30% { transform: translateY(-18px) scale(calc(var(--pet-size) * 1.06)); }
+  60% { transform: translateY(-5px) scale(calc(var(--pet-size) * 0.98)); }
 }
-.pet-hamster.bouncing {
-  animation: pet-bounce 0.8s ease-in-out infinite;
-}
+.pet-hamster.bouncing { animation: pet-bounce 0.8s ease-in-out infinite; }
 
-/* 生气抖动 */
+@keyframes pet-jump {
+  0% { transform: translateY(0) scale(var(--pet-size)); }
+  15% { transform: translateY(4px) scale(calc(var(--pet-size) * 1.08), calc(var(--pet-size) * 0.86)); }
+  35% { transform: translateY(-38px) scale(calc(var(--pet-size) * 0.92), calc(var(--pet-size) * 1.12)); }
+  55% { transform: translateY(-48px) scale(calc(var(--pet-size) * 0.98), calc(var(--pet-size) * 1.06)); }
+  75% { transform: translateY(-14px) scale(var(--pet-size)); }
+  90% { transform: translateY(4px) scale(calc(var(--pet-size) * 1.08), calc(var(--pet-size) * 0.9)); }
+  100% { transform: translateY(0) scale(var(--pet-size)); }
+}
+.pet-hamster.jumping { animation: pet-jump 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+.pet-hamster.bouncing-joy { animation: pet-jump 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite 0.1s; }
+
 @keyframes pet-shake {
-  0%, 100% { transform: translateX(0) rotate(0deg); }
-  20% { transform: translateX(-3px) rotate(-2deg); }
-  40% { transform: translateX(3px) rotate(2deg); }
-  60% { transform: translateX(-2px) rotate(-1deg); }
-  80% { transform: translateX(2px) rotate(1deg); }
+  0%, 100% { transform: translateX(0) rotate(0deg) scale(var(--pet-size)); }
+  20% { transform: translateX(-4px) rotate(-3deg) scale(var(--pet-size)); }
+  40% { transform: translateX(4px) rotate(3deg) scale(var(--pet-size)); }
+  60% { transform: translateX(-3px) rotate(-2deg) scale(var(--pet-size)); }
+  80% { transform: translateX(3px) rotate(2deg) scale(var(--pet-size)); }
 }
-.pet-hamster.shaking {
-  animation: pet-shake 0.5s ease-in-out infinite;
-}
+.pet-hamster.shaking { animation: pet-shake 0.5s ease-in-out infinite; }
 
-/* 打瞌睡 */
+/* ═══ 行为动画 ═══ */
+
+@keyframes pet-walk {
+  0%, 100% { transform: translateX(0) translateY(0) rotate(0deg) scale(var(--pet-size)); }
+  25% { transform: translateX(3px) translateY(-5px) rotate(-4deg) scale(var(--pet-size)); }
+  50% { transform: translateX(7px) translateY(0) rotate(0deg) scale(var(--pet-size)); }
+  75% { transform: translateX(3px) translateY(-5px) rotate(4deg) scale(var(--pet-size)); }
+}
+.pet-hamster.walking { animation: pet-walk 0.55s ease-in-out infinite; }
+
+@keyframes pet-run {
+  0%, 100% { transform: translateX(0) translateY(0) rotate(-6deg) scale(var(--pet-size)); }
+  25% { transform: translateX(6px) translateY(-12px) rotate(-10deg) scale(var(--pet-size)); }
+  50% { transform: translateX(12px) translateY(0) rotate(-6deg) scale(var(--pet-size)); }
+  75% { transform: translateX(6px) translateY(-12px) rotate(-2deg) scale(var(--pet-size)); }
+}
+.pet-hamster.running { animation: pet-run 0.32s ease-in-out infinite; }
+
+@keyframes pet-spin {
+  0% { transform: rotate(0deg) scale(var(--pet-size)); }
+  100% { transform: rotate(360deg) scale(var(--pet-size)); }
+}
+.pet-hamster.spinning { animation: pet-spin 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+
+@keyframes pet-tumble {
+  0% { transform: translateY(0) rotate(0deg) scale(var(--pet-size)); }
+  25% { transform: translateY(-25px) rotate(90deg) scale(var(--pet-size)); }
+  50% { transform: translateY(-38px) rotate(180deg) scale(var(--pet-size)); }
+  75% { transform: translateY(-15px) rotate(270deg) scale(var(--pet-size)); }
+  100% { transform: translateY(0) rotate(360deg) scale(var(--pet-size)); }
+}
+.pet-hamster.tumbling { animation: pet-tumble 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+
+@keyframes pet-dash {
+  0% { transform: translateX(0) scale(var(--pet-size)); }
+  30% { transform: translateX(-8px) scale(calc(var(--pet-size) * 0.92), var(--pet-size)); }
+  100% { transform: translateX(45px) scale(calc(var(--pet-size) * 1.18), calc(var(--pet-size) * 0.96)); }
+}
+.pet-hamster.dashing { animation: pet-dash 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+
+@keyframes pet-wiggle {
+  0%, 100% { transform: rotate(0deg) translateY(0) scale(var(--pet-size)); }
+  20% { transform: rotate(-8deg) translateY(-2px) scale(var(--pet-size)); }
+  40% { transform: rotate(8deg) translateY(0) scale(var(--pet-size)); }
+  60% { transform: rotate(-5deg) translateY(-1px) scale(var(--pet-size)); }
+  80% { transform: rotate(5deg) translateY(0) scale(var(--pet-size)); }
+}
+.pet-hamster.wiggling { animation: pet-wiggle 0.8s ease-in-out; }
+
+/* ═══ 跳绳动画 ═══ */
+@keyframes pet-jumprope {
+  0% { transform: translateY(0) scale(var(--pet-size)); }
+  10% { transform: translateY(4px) scale(calc(var(--pet-size) * 1.08), calc(var(--pet-size) * 0.9)); }
+  25% { transform: translateY(-24px) scale(calc(var(--pet-size) * 0.95), calc(var(--pet-size) * 1.1)); }
+  40% { transform: translateY(-32px) scale(var(--pet-size)); }
+  55% { transform: translateY(-15px) scale(var(--pet-size)); }
+  70% { transform: translateY(3px) scale(calc(var(--pet-size) * 1.06), calc(var(--pet-size) * 0.92)); }
+  85% { transform: translateY(-18px) scale(calc(var(--pet-size) * 0.97), calc(var(--pet-size) * 1.08)); }
+  100% { transform: translateY(0) scale(var(--pet-size)); }
+}
+.pet-hamster.jumprope { animation: pet-jumprope 0.55s ease-in-out infinite; }
+
+/* ═══ 跑圈动画（原地向左/右跑一圈后回起点） ═══ */
+@keyframes pet-run-circle-out {
+  0% { transform: translateX(0) translateY(0) rotate(0deg) scale(var(--pet-size)); }
+  25% { transform: translateX(65px) translateY(-32px) rotate(-10deg) scale(var(--pet-size)); }
+  50% { transform: translateX(105px) translateY(0) rotate(-5deg) scale(var(--pet-size)); }
+  75% { transform: translateX(65px) translateY(32px) rotate(5deg) scale(var(--pet-size)); }
+  100% { transform: translateX(0) translateY(0) rotate(0deg) scale(var(--pet-size)); }
+}
+@keyframes pet-run-circle-back {
+  0% { transform: translateX(0) translateY(0) rotate(0deg) scale(var(--pet-size)); }
+  25% { transform: translateX(-65px) translateY(32px) rotate(10deg) scale(var(--pet-size)); }
+  50% { transform: translateX(-105px) translateY(0) rotate(5deg) scale(var(--pet-size)); }
+  75% { transform: translateX(-65px) translateY(-32px) rotate(-5deg) scale(var(--pet-size)); }
+  100% { transform: translateX(0) translateY(0) rotate(0deg) scale(var(--pet-size)); }
+}
+.pet-hamster.run-circle-right { animation: pet-run-circle-out 2.5s cubic-bezier(0.42, 0, 0.58, 1); }
+.pet-hamster.run-circle-left { animation: pet-run-circle-back 2.5s cubic-bezier(0.42, 0, 0.58, 1); }
+
+/* ═══ 唱歌动画 ═══ */
+@keyframes pet-sing {
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(var(--pet-size)); }
+  15% { transform: translateY(-7px) rotate(-4deg) scale(calc(var(--pet-size) * 1.03)); }
+  30% { transform: translateY(0) rotate(2deg) scale(var(--pet-size)); }
+  45% { transform: translateY(-9px) rotate(-2deg) scale(calc(var(--pet-size) * 1.05)); }
+  60% { transform: translateY(-2px) rotate(3deg) scale(calc(var(--pet-size) * 1.02)); }
+  75% { transform: translateY(-11px) rotate(-4deg) scale(calc(var(--pet-size) * 1.06)); }
+  90% { transform: translateY(-3px) rotate(1deg) scale(calc(var(--pet-size) * 1.01)); }
+}
+.pet-hamster.singing { animation: pet-sing 1.6s ease-in-out infinite; }
+
+/* ═══ 舞蹈动画 ═══ */
+@keyframes pet-dance-disco {
+  0%, 100% { transform: translateX(0) translateY(0) rotate(0deg) scale(var(--pet-size)); }
+  12.5% { transform: translateX(-9px) translateY(-6px) rotate(-9deg) scale(var(--pet-size)); }
+  25% { transform: translateX(0) translateY(-12px) rotate(0deg) scale(calc(var(--pet-size) * 1.05)); }
+  37.5% { transform: translateX(9px) translateY(-6px) rotate(9deg) scale(var(--pet-size)); }
+  50% { transform: translateX(0) translateY(0) rotate(0deg) scale(calc(var(--pet-size) * 0.96)); }
+  62.5% { transform: translateX(-9px) translateY(3px) rotate(-5deg) scale(var(--pet-size)); }
+  75% { transform: translateX(0) translateY(-9px) rotate(0deg) scale(calc(var(--pet-size) * 1.05)); }
+  87.5% { transform: translateX(9px) translateY(3px) rotate(5deg) scale(var(--pet-size)); }
+}
+.pet-hamster.dance-disco { animation: pet-dance-disco 1s ease-in-out infinite; }
+
+@keyframes pet-dance-ballet {
+  0% { transform: translateY(0) rotate(0deg) scale(var(--pet-size)); }
+  15% { transform: translateY(-8px) rotate(0deg) scale(calc(var(--pet-size) * 1.05)); }
+  30% { transform: translateY(-16px) rotate(90deg) scale(var(--pet-size)); }
+  45% { transform: translateY(-22px) rotate(180deg) scale(calc(var(--pet-size) * 1.08)); }
+  60% { transform: translateY(-16px) rotate(270deg) scale(var(--pet-size)); }
+  75% { transform: translateY(-8px) rotate(360deg) scale(calc(var(--pet-size) * 1.05)); }
+  90% { transform: translateY(-3px) rotate(370deg) scale(calc(var(--pet-size) * 1.01)); }
+  100% { transform: translateY(0) rotate(360deg) scale(var(--pet-size)); }
+}
+.pet-hamster.dance-ballet { animation: pet-dance-ballet 2s ease-in-out infinite; }
+
+@keyframes pet-dance-robot {
+  0%, 100% { transform: translateX(0) translateY(0) rotate(0deg) scale(var(--pet-size)); }
+  10%, 15% { transform: translateX(-6px) translateY(0) rotate(-6deg) scale(var(--pet-size)); }
+  20%, 30% { transform: translateX(6px) translateY(-4px) rotate(6deg) scale(var(--pet-size)); }
+  35%, 45% { transform: translateX(0) translateY(-9px) rotate(0deg) scale(var(--pet-size)); }
+  50%, 55% { transform: translateX(-9px) translateY(0) rotate(-10deg) scale(var(--pet-size)); }
+  60%, 70% { transform: translateX(9px) translateY(-6px) rotate(10deg) scale(var(--pet-size)); }
+  75% { transform: translateX(0) translateY(0) rotate(0deg) scale(var(--pet-size)); }
+  80% { transform: translateX(0) translateY(-13px) rotate(0deg) scale(var(--pet-size)); }
+  90% { transform: translateX(0) translateY(0) rotate(0deg) scale(var(--pet-size)); }
+}
+.pet-hamster.dance-robot { animation: pet-dance-robot 1.8s steps(1, end) infinite; }
+
+/* ═══ 吃饭动画序列 ═══ */
+@keyframes pet-eat-ready {
+  0%, 100% { transform: translateY(0) scale(var(--pet-size)); }
+  30% { transform: translateY(-4px) scale(calc(var(--pet-size) * 1.03)); }
+  60% { transform: translateY(0) scale(calc(var(--pet-size) * 1.01)); }
+}
+.pet-hamster.eat-ready { animation: pet-eat-ready 1s ease-in-out; }
+
+@keyframes pet-eat-chew {
+  0%, 100% { transform: rotate(0deg) translateY(0) scale(var(--pet-size)); }
+  20% { transform: rotate(-7deg) translateY(-1px) scale(var(--pet-size)); }
+  40% { transform: rotate(7deg) translateY(0) scale(var(--pet-size)); }
+  60% { transform: rotate(-5deg) translateY(-1px) scale(var(--pet-size)); }
+  80% { transform: rotate(5deg) translateY(0) scale(var(--pet-size)); }
+}
+.pet-hamster.eat-chew { animation: pet-eat-chew 0.5s ease-in-out infinite; }
+
+@keyframes pet-eat-satisfied {
+  0% { transform: translateY(0) scale(var(--pet-size)); }
+  25% { transform: translateY(-5px) scale(calc(var(--pet-size) * 1.04)); }
+  50% { transform: translateY(-2px) scale(calc(var(--pet-size) * 1.07)); }
+  75% { transform: translateY(-5px) scale(calc(var(--pet-size) * 1.04)); }
+  100% { transform: translateY(0) scale(calc(var(--pet-size) * 1.03)); }
+}
+.pet-hamster.eat-satisfied { animation: pet-eat-satisfied 1.5s ease-in-out; }
+
+/* ═══ 睡觉动画序列 ═══ */
+@keyframes pet-fall-asleep {
+  0% { transform: rotate(0deg) translateY(0) scale(var(--pet-size)); }
+  30% { transform: rotate(5deg) translateY(2px) scale(var(--pet-size)); }
+  60% { transform: rotate(12deg) translateY(3px) scale(calc(var(--pet-size) * 0.98)); }
+  100% { transform: rotate(15deg) translateY(5px) scale(calc(var(--pet-size) * 0.95)); }
+}
+.pet-hamster.fall-asleep { animation: pet-fall-asleep 2s ease-in-out forwards; }
+
+@keyframes pet-deep-sleep {
+  0%, 100% { transform: rotate(15deg) translateY(5px) scale(calc(var(--pet-size) * 0.95)); }
+  50% { transform: rotate(15deg) translateY(3px) scale(calc(var(--pet-size) * 0.98)); }
+}
+.pet-hamster.deep-sleep { animation: pet-deep-sleep 3s ease-in-out infinite; }
+
+@keyframes pet-wake-up {
+  0% { transform: rotate(15deg) translateY(5px) scale(calc(var(--pet-size) * 0.95)); }
+  40% { transform: rotate(8deg) translateY(3px) scale(calc(var(--pet-size) * 0.98)); }
+  70% { transform: rotate(3deg) translateY(1px) scale(calc(var(--pet-size) * 1.01)); }
+  85% { transform: rotate(-2deg) translateY(-3px) scale(calc(var(--pet-size) * 1.03)); }
+  100% { transform: rotate(0deg) translateY(0) scale(var(--pet-size)); }
+}
+.pet-hamster.wake-up { animation: pet-wake-up 1.5s ease-in-out; }
+
+/* ═══ 生活表情动画 ═══ */
 @keyframes pet-sleep {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(2px) rotate(3deg); }
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(var(--pet-size)); }
+  50% { transform: translateY(3px) rotate(3deg) scale(var(--pet-size)); }
 }
-.pet-hamster.sleeping {
-  animation: pet-sleep 2s ease-in-out infinite;
-}
+.pet-hamster.sleeping { animation: pet-sleep 2s ease-in-out infinite; }
 
-/* 吃瓜子 - 左右晃 */
 @keyframes pet-eat {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-5deg); }
-  75% { transform: rotate(5deg); }
+  0%, 100% { transform: rotate(0deg) scale(var(--pet-size)); }
+  25% { transform: rotate(-6deg) scale(var(--pet-size)); }
+  75% { transform: rotate(6deg) scale(var(--pet-size)); }
 }
-.pet-hamster.eating {
-  animation: pet-eat 0.6s ease-in-out infinite;
-}
+.pet-hamster.eating { animation: pet-eat 0.6s ease-in-out infinite; }
 
-/* 举哑铃 - 上下 */
 @keyframes pet-exercise {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+  0%, 100% { transform: translateY(0) scale(var(--pet-size)); }
+  50% { transform: translateY(-10px) scale(var(--pet-size)); }
 }
-.pet-hamster.exercising {
-  animation: pet-exercise 0.8s ease-in-out infinite;
-}
+.pet-hamster.exercising { animation: pet-exercise 0.8s ease-in-out infinite; }
 
-/* 洗澡 - 旋转 */
 @keyframes pet-bath {
-  0% { transform: rotate(0deg); }
-  25% { transform: rotate(10deg); }
-  50% { transform: rotate(0deg); }
-  75% { transform: rotate(-10deg); }
-  100% { transform: rotate(0deg); }
+  0% { transform: rotate(0deg) scale(var(--pet-size)); }
+  25% { transform: rotate(10deg) scale(var(--pet-size)); }
+  50% { transform: rotate(0deg) scale(var(--pet-size)); }
+  75% { transform: rotate(-10deg) scale(var(--pet-size)); }
+  100% { transform: rotate(0deg) scale(var(--pet-size)); }
 }
-.pet-hamster.bathing {
-  animation: pet-bath 1.2s ease-in-out infinite;
-}
+.pet-hamster.bathing { animation: pet-bath 1.2s ease-in-out infinite; }
 
-/* 看K线 - 微抖 */
 @keyframes pet-read {
-  0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(2px); }
+  0%, 100% { transform: translateX(0) scale(var(--pet-size)); }
+  50% { transform: translateX(3px) scale(var(--pet-size)); }
 }
-.pet-hamster.reading {
-  animation: pet-read 1.5s ease-in-out infinite;
-}
+.pet-hamster.reading { animation: pet-read 1.5s ease-in-out infinite; }
 
-/* 气泡文字 */
+/* ═══ 气泡和UI ═══ */
 .pet-bubble {
   position: absolute;
   bottom: 105px;
@@ -127,10 +299,9 @@
   opacity: 0;
   transition: opacity 0.3s;
   pointer-events: none;
+  z-index: 10;
 }
-.pet-bubble.show {
-  opacity: 1;
-}
+.pet-bubble.show { opacity: 1; }
 .pet-bubble::after {
   content: '';
   position: absolute;
@@ -142,7 +313,6 @@
   border-top: 6px solid #1e1e3a;
 }
 
-/* 等级标签 */
 .pet-level {
   position: absolute;
   bottom: -4px;
@@ -159,7 +329,6 @@
 .pet-level.lv-fire { background: #7f1d1d; color: #f87171; }
 .pet-level.lv-diamond { background: #1e3a5f; color: #60a5fa; }
 
-/* 详情面板 */
 .pet-detail {
   position: absolute;
   bottom: 120px;
@@ -191,10 +360,7 @@
 .pet-detail .stat-value.positive { color: #4ade80; }
 .pet-detail .stat-value.negative { color: #ef4444; }
 
-/* 装备进度条 */
-.pet-equip-progress {
-  margin-top: 12px;
-}
+.pet-equip-progress { margin-top: 12px; }
 .pet-equip-item {
   display: flex;
   align-items: center;
@@ -212,7 +378,6 @@
 .pet-equip-item .equip-locked { background: #1e1e3a; color: #475569; }
 .pet-equip-item .equip-unlocked { background: #1e3a5f; color: #60a5fa; }
 
-/* 进度条 */
 .pet-progress-bar {
   height: 3px;
   background: #1a1a2e;
