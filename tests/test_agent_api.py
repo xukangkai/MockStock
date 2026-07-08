@@ -100,6 +100,37 @@ def test_agent_cycles_limit(client):
     assert len(resp.json()) == 2
 
 
+def test_agent_cycles_expose_candidate_debug_payload(client):
+    cycle_id = "candidate-debug-001"
+    with web_app.SessionLocal() as db:
+        cycle = AgentCycleLogModel(
+            cycle_id=cycle_id,
+            status="ok",
+            risk_level="low",
+            summary="agent picked none",
+            plan_json=json.dumps({
+                "reasoning": ["等待机会"],
+                "position_actions": [],
+                "buy_picks": [],
+                "candidate_debug": {
+                    "input_count": 100,
+                    "selected_count": 0,
+                    "rejected_by": "researcher",
+                    "rejected_reasons": ["当前没有足够高把握标的"],
+                },
+            }, ensure_ascii=False),
+        )
+        db.add(cycle)
+        db.commit()
+
+    resp = client.get("/api/agent/cycles")
+    assert resp.status_code == 200
+    rows = [row for row in resp.json() if row["cycle_id"] == cycle_id]
+    assert len(rows) == 1
+    assert rows[0]["plan"]["candidate_debug"]["input_count"] == 100
+    assert rows[0]["plan"]["candidate_debug"]["rejected_by"] == "researcher"
+
+
 # ── /api/agent/memory ───────────────────────────────────────────
 
 def test_agent_memory_empty(client):

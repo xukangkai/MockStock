@@ -969,13 +969,15 @@ const PetWidget = (() => {
     // 注入 HTML
     const html = `
       <div class="pet-container" id="petContainer">
+        <div class="pet-close-btn" id="petCloseBtn">×</div>
         <div class="pet-bubble" id="petBubble">你好呀~</div>
         <div class="pet-detail" id="petDetail">
           <div id="petDetailContent"></div>
         </div>
         <div class="pet-hamster idle" id="petHamster"></div>
         <div class="pet-level lv-normal" id="petLevel">普通仓鼠</div>
-      </div>`;
+      </div>
+      <div class="pet-restore-btn" id="petRestoreBtn">🐹</div>`;
 
     document.body.insertAdjacentHTML('beforeend', html);
 
@@ -1026,22 +1028,72 @@ const PetWidget = (() => {
       }
     });
 
-    // 首次加载
+    // 关闭按钮
+    document.getElementById('petCloseBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      hidePet();
+    });
+
+    // 恢复按钮
+    document.getElementById('petRestoreBtn').addEventListener('click', () => {
+      showPet();
+    });
+
+    // 首次加载数据（无论隐藏与否，保证状态正确）
+    fetchData();
+
+    // 检查是否之前被隐藏
+    if (localStorage.getItem('petHidden') === 'true') {
+      hidePet();
+    } else {
+      showBubble(randomBubble(state.currentExpr), 4000);
+      startPetSystems();
+    }
+  }
+
+  // ── 隐藏宠物 ──
+  function hidePet() {
+    const container = document.getElementById('petContainer');
+    const restoreBtn = document.getElementById('petRestoreBtn');
+    if (container) container.style.display = 'none';
+    if (restoreBtn) restoreBtn.classList.add('visible');
+    localStorage.setItem('petHidden', 'true');
+    stopPetSystems();
+  }
+
+  // ── 显示宠物 ──
+  function showPet() {
+    const container = document.getElementById('petContainer');
+    const restoreBtn = document.getElementById('petRestoreBtn');
+    if (container) container.style.display = '';
+    if (restoreBtn) restoreBtn.classList.remove('visible');
+    localStorage.setItem('petHidden', 'false');
     fetchData().then(() => {
       showBubble(randomBubble(state.currentExpr), 4000);
     });
+    startPetSystems();
+  }
 
-    // 定时拉数据
+  // ── 启动所有定时器 ──
+  function startPetSystems() {
+    if (fetchTimer) clearInterval(fetchTimer);
     fetchTimer = setInterval(fetchData, CONFIG.fetchInterval);
-
-    // 启动生活表情
     scheduleLifeExpr();
-
-    // 启动碎碎念（5秒一句）
     startChatter();
-
-    // 启动行为系统（跑、跳、走等）
     startActionSystem();
+  }
+
+  // ── 停止所有定时器 ──
+  function stopPetSystems() {
+    clearInterval(fetchTimer);
+    clearInterval(chatterTimer);
+    clearTimeout(lifeTimer);
+    clearTimeout(bubbleTimer);
+    clearTimeout(actionTimer);
+    fetchTimer = null;
+    chatterTimer = null;
+    lifeTimer = null;
+    actionTimer = null;
   }
 
   // ── 拖拽处理 ──
@@ -1163,17 +1215,15 @@ const PetWidget = (() => {
 
   // ── 清理 ──
   function destroy() {
-    clearInterval(fetchTimer);
-    clearInterval(chatterTimer);
-    clearTimeout(lifeTimer);
-    clearTimeout(bubbleTimer);
-    clearTimeout(actionTimer);
+    stopPetSystems();
     const el = document.getElementById('petContainer');
     if (el) el.remove();
+    const rb = document.getElementById('petRestoreBtn');
+    if (rb) rb.remove();
     state.initialized = false;
   }
 
-  return { init, destroy };
+  return { init, destroy, hide: hidePet, show: showPet };
 })();
 
 // DOM ready 后初始化

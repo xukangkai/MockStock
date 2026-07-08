@@ -126,6 +126,214 @@ def test_build_agent_cycle_context_keeps_core_sections(sample_context):
     assert context["memory_summary"]["notes"] == ["avoid chasing"]
 
 
+def test_summarize_candidate_for_agent_keeps_lightweight_fields():
+    raw = {
+        "symbol": "000725",
+        "name": "京东方A",
+        "price": 7.76,
+        "pct": 1.8,
+        "amount": 15_200_000_000,
+        "ma5": 7.6,
+        "pe": 18.2,
+        "pb": 1.4,
+        "net_profit_yoy": 12.5,
+        "revenue_yoy": 6.8,
+        "is_etf": False,
+        "recent_high": 7.95,
+        "recent_low": 7.42,
+        "extra_noise": "drop me",
+    }
+
+    summary = web_app.summarize_candidate_for_agent(raw)
+
+    assert summary == {
+        "symbol": "000725",
+        "name": "京东方A",
+        "price": 7.76,
+        "pct": 1.8,
+        "amount": 15_200_000_000,
+        "ma5": 7.6,
+        "pe": 18.2,
+        "pb": 1.4,
+        "net_profit_yoy": 12.5,
+        "revenue_yoy": 6.8,
+        "is_etf": False,
+        "recent_high": 7.95,
+        "recent_low": 7.42,
+    }
+
+
+@pytest.mark.parametrize("field,expected", [("name", ""), ("price", 0.0), ("amount", 0.0)])
+def test_summarize_candidate_for_agent_defaults_missing_core_fields(field, expected):
+    raw = {"symbol": "300750"}
+
+    summary = web_app.summarize_candidate_for_agent(raw)
+
+    assert summary[field] == expected
+
+
+def test_build_agent_cycle_context_keeps_candidates_alias_for_full_candidate_list(sample_context):
+    extra_candidates = [
+        {"symbol": f"600{i:03d}", "name": f"样本{i}", "price": float(i), "amount": i * 1000}
+        for i in range(100)
+    ]
+
+    context = web_app.build_agent_cycle_context(
+        cycle_id=sample_context["cycle_id"],
+        timestamp=sample_context["timestamp"],
+        account_info=sample_context["account"],
+        positions_ctx=sample_context["positions"],
+        candidates_ctx=extra_candidates,
+        market_sentiment=sample_context["market_snapshot"],
+        engine_params=sample_context["engine_params"],
+        recent_trades=[],
+        recent_decisions=[],
+        memory_summary={"notes": []},
+    )
+
+    assert len(context["candidate_pool"]) == 100
+    assert len(context["candidates"]) == 100
+    assert context["candidates"][0]["symbol"] == "600000"
+
+
+def test_comprehensive_trade_passes_top_100_summaries_to_agent(monkeypatch, db):
+    acct = web_app.get_account(db)
+    acct.cash = 12000
+    db.commit()
+
+    engine = web_app.AutonomousTradingEngine()
+    captured = {}
+
+    all_stocks = [
+        {
+            "symbol": f"600{i:03d}",
+            "name": f"样本{i}",
+            "price": 10 + i * 0.01,
+            "pct": i * 0.1,
+            "amount": 1_000_000_000 - i,
+            "extra_noise": f"raw-only-{i}",
+        }
+        for i in range(120)
+    ]
+
+    monkeypatch.setattr(web_app, "fetch_all_stocks", lambda: all_stocks)
+    monkeypatch.setattr(
+        web_app,
+        "fetch_financial_batch",
+        lambda: {"600000": {"net_profit_yoy": 15.2, "revenue_yoy": 8.4, "eps": 0.91}},
+    )
+    monkeypatch.setattr(
+        web_app,
+        "fetch_history",
+        lambda symbol, days=20: [
+            {"close": 9.8, "high": 10.4, "low": 9.5},
+            {"close": 10.0, "high": 10.6, "low": 9.7},
+            {"close": 10.2, "high": 10.8, "low": 9.9},
+            {"close": 10.4, "high": 11.0, "low": 10.1},
+            {"close": 10.6, "high": 11.2, "low": 10.3},
+        ]
+        if symbol == "600000"
+        else None,
+    )
+    monkeypatch.setattr(web_app, "calculate_indicators", lambda hist: {"ma5": 10.2})
+    monkeypatch.setattr(web_app, "fetch_valuation", lambda symbol: {"pe": 11.8, "pb": 1.6, "total_mv": 888000} if symbol == "600000" else None)
+    monkeypatch.setattr(web_app, "calculate_market_sentiment", lambda stocks: {"sentiment": "neutral", "score": 50})
+    monkeypatch.setattr(web_app, "recall_recent_agent_memory", lambda db, limit=5: {"items": [], "notes": []})
+
+    def fake_run_agent_cycle_with_fallback(db_session, context):
+        first_candidate = context["candidates"][0]
+        captured["candidate_count"] = len(context["candidates"])
+        captured["first_symbol"] = first_candidate["symbol"]
+        captured["last_symbol"] = context["candidates"][-1]["symbol"]
+        captured["first_candidate"] = first_candidate
+        return {
+            "market_analysis": "ok",
+            "risk_level": "low",
+            "position_actions": [],
+            "buy_picks": [],
+            "reasoning": [],
+            "candidate_debug": {"input_count": len(context["candidates"]), "selected_count": 0},
+        }
+
+    monkeypatch.setattr(web_app, "run_agent_cycle_with_fallback", fake_run_agent_cycle_with_fallback)
+    monkeypatch.setattr(web_app, "log_decision", lambda *args, **kwargs: None)
+
+    engine._comprehensive_trade(db)
+
+    assert captured["candidate_count"] == 100
+    assert captured["first_symbol"] == "600000"
+    assert captured["last_symbol"] == "600099"
+    assert captured["first_candidate"] == {
+        "symbol": "600000",
+        "name": "样本0",
+        "price": 10.0,
+        "pct": 0.0,
+        "amount": 1_000_000_000.0,
+        "ma5": 10.2,
+        "pe": 11.8,
+        "pb": 1.6,
+        "net_profit_yoy": 15.2,
+        "revenue_yoy": 8.4,
+        "is_etf": False,
+        "recent_high": 11.2,
+        "recent_low": 9.5,
+    }
+    assert "extra_noise" not in captured["first_candidate"]
+    assert "total_mv" not in captured["first_candidate"]
+    assert "eps" not in captured["first_candidate"]
+
+
+def test_run_candidate_research_node_uses_all_candidates_in_prompt(monkeypatch):
+    captured = {}
+    candidates = [
+        {"symbol": f"600{i:03d}", "name": f"样本{i}", "price": 10.0 + i, "amount": 1_000_000_000 - i}
+        for i in range(12)
+    ]
+    state = {
+        "context": {
+            "candidates": candidates,
+            "account": {"available_cash": 10000, "max_positions": 3, "current_positions": 0},
+        },
+        "market_assessment": {"regime": "neutral"},
+    }
+
+    def fake_agent_ai_call(agent_key, prompt, stage_label):
+        captured["prompt"] = prompt
+        return json.dumps({"assessments": [], "reasoning": "无合适标的"})
+
+    monkeypatch.setattr(web_app, "_agent_ai_call", fake_agent_ai_call)
+
+    result = web_app.run_candidate_research_node(state)
+
+    assert result["candidate_debug"]["input_count"] == 12
+    assert "600011 样本11" in captured["prompt"]
+
+
+
+def test_run_candidate_research_node_prompt_drops_fixed_price_band_language(monkeypatch):
+    captured = {}
+    state = {
+        "context": {
+            "candidates": [{"symbol": "000725", "name": "京东方A", "price": 7.76, "amount": 1_000_000_000}],
+            "account": {"available_cash": 10000, "max_positions": 3, "current_positions": 0},
+        },
+        "market_assessment": {"regime": "defensive"},
+    }
+
+    def fake_agent_ai_call(agent_key, prompt, stage_label):
+        captured["prompt"] = prompt
+        return json.dumps({"assessments": [], "reasoning": "无合适标的"})
+
+    monkeypatch.setattr(web_app, "_agent_ai_call", fake_agent_ai_call)
+
+    web_app.run_candidate_research_node(state)
+
+    assert "股票5-50元" not in captured["prompt"]
+    assert "ETF 0.5-5元" not in captured["prompt"]
+    assert "价格×100 ≤ 可用现金" not in captured["prompt"]
+    assert "成交额前100只活跃股候选摘要，本轮输入 1 只" in captured["prompt"]
+
+
 def test_recall_recent_agent_memory_prefers_latest_rows(db):
     db.add(
         web_app.AgentMemoryModel(

@@ -385,6 +385,51 @@
   margin-top: 2px;
   overflow: hidden;
 }
+/* ═══ 隐藏/恢复按钮 ═══ */
+.pet-close-btn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(30,30,58,0.85);
+  color: #94a3b8;
+  border: 1px solid #2a2a4a;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s, color 0.2s;
+  z-index: 20;
+  user-select: none;
+}
+.pet-container:hover .pet-close-btn { opacity: 1; }
+.pet-close-btn:hover { background: #ef4444; color: #fff; border-color: #ef4444; }
+
+.pet-restore-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(30,30,58,0.6);
+  border: 1px solid #2a2a4a;
+  font-size: 18px;
+  line-height: 34px;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.2s, background 0.2s, transform 0.2s;
+  z-index: 1000;
+  user-select: none;
+  display: none;
+}
+.pet-restore-btn:hover { opacity: 1; background: rgba(30,30,58,0.9); transform: scale(1.1); }
+.pet-restore-btn.visible { display: block; }
+
 .pet-progress-fill {
   height: 100%;
   border-radius: 2px;

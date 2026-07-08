@@ -884,6 +884,26 @@ def safe_json_loads(raw: str, default):
 # ═════════════════════════════════════════════════════
 #  Agent 上下文与记忆辅助函数
 # ═════════════════════════════════════════════════════
+def summarize_candidate_for_agent(stock: Dict[str, Any]) -> Dict[str, Any]:
+    """构造给 Agent 使用的轻量候选摘要，避免在候选池阶段丢失大部分市场视角。"""
+    summary = {
+        "symbol": stock.get("symbol", ""),
+        "name": stock.get("name", ""),
+        "price": float(stock.get("price", 0) or 0),
+        "pct": float(stock.get("pct", 0) or 0),
+        "amount": float(stock.get("amount", 0) or 0),
+        "ma5": stock.get("ma5"),
+        "pe": stock.get("pe"),
+        "pb": stock.get("pb"),
+        "net_profit_yoy": stock.get("net_profit_yoy"),
+        "revenue_yoy": stock.get("revenue_yoy"),
+        "is_etf": bool(stock.get("is_etf", False)),
+        "recent_high": stock.get("recent_high"),
+        "recent_low": stock.get("recent_low"),
+    }
+    return summary
+
+
 def build_agent_cycle_context(cycle_id: str, timestamp: str, account_info: Dict,
                               positions_ctx: List[Dict], candidates_ctx: List[Dict],
                               market_sentiment: Dict, engine_params: Dict,
@@ -895,6 +915,7 @@ def build_agent_cycle_context(cycle_id: str, timestamp: str, account_info: Dict,
         "account": account_info,
         "positions": positions_ctx,
         "candidate_pool": candidates_ctx,
+        "candidates": candidates_ctx,
         "market_snapshot": market_sentiment,
         "engine_params": engine_params,
         "recent_trades": recent_trades,
@@ -1133,12 +1154,15 @@ def run_candidate_research_node(state: TradingAgentState) -> Dict[str, Any]:
 
     if not candidates:
         _update_agent_thinking("researcher", "无候选标的，跳过筛选")
-        return {"candidate_assessments": []}
+        return {
+            "candidate_assessments": [],
+            "candidate_debug": {"input_count": 0, "selected_count": 0, "rejected_by": "candidate_pool_empty", "rejected_reasons": ["候选池为空"]}
+        }
 
     _update_agent_thinking("researcher", f"正在分析 {len(candidates)} 只候选标的...")
 
     cand_lines = []
-    for c in candidates[:8]:
+    for c in candidates:
         tech = []
         if c.get("ma5"):
             tech.append(f"MA5={c['ma5']}")
@@ -1149,26 +1173,26 @@ def run_candidate_research_node(state: TradingAgentState) -> Dict[str, Any]:
         tech_str = " ".join(tech)
         cand_lines.append(
             f"- {c['symbol']} {c.get('name','')}: ¥{c.get('price',0):.2f} "
-            f"成交额¥{c.get('amount',0)/1e8:.1f}亿 {tech_str}"
+            f"涨跌幅{c.get('pct',0):+.2f}% 成交额¥{c.get('amount',0)/1e8:.1f}亿 {tech_str}".strip()
         )
     cand_text = "\n".join(cand_lines)
 
     prompt = f"""你是A股短线选股专家。
 
-## 候选标的（按成交额排序前8）
+## 候选标的（成交额前100只活跃股候选摘要，本轮输入 {len(candidates)} 只）
 {cand_text}
 
-## 账户约束
+## 账户信息
 - 可用现金: ¥{acct.get('available_cash', 0):,.0f}
 - 最大持仓: {acct.get('max_positions', 3)} 只
 - 当前持仓: {acct.get('current_positions', 0)} 只
 - 市场格局: {market.get('regime', 'neutral')}
 
-## 选股标准
-- 技术面：MA趋势向上、回调到支撑位、量价配合
-- 基本面：正增长、合理估值
-- 价格：股票5-50元，ETF 0.5-5元
-- 只推荐买得起的（价格×100 ≤ 可用现金）
+## 选股要求
+- 从以上候选中找出当前最值得买入的 0-3 只标的。
+- 优先考虑趋势质量、流动性、风险收益比、基本面支撑与当前市场格局的匹配度。
+- 结合账户规模判断哪些标的更适合当前资金体量，但不要机械套用固定价格区间。
+- 如果没有足够有把握的标的，可以返回空数组。
 
 ## 输出JSON（严格）
 {{
@@ -1199,7 +1223,19 @@ def run_candidate_research_node(state: TradingAgentState) -> Dict[str, Any]:
     else:
         _update_agent_thinking("researcher", reasoning or "本轮无符合标准的标的")
 
-    return {"candidate_assessments": assessments}
+    rejected_reasons = []
+    if not assessments:
+        rejected_reasons.append(reasoning or "候选猎手未给出可买标的")
+
+    return {
+        "candidate_assessments": assessments,
+        "candidate_debug": {
+            "input_count": len(candidates),
+            "selected_count": len(assessments),
+            "rejected_by": "researcher" if not assessments else "",
+            "rejected_reasons": rejected_reasons,
+        }
+    }
 
 
 # ── 子 Agent 4: 🛡️ 风控卫士（AI 评估组合风险）──
@@ -1288,6 +1324,7 @@ def run_decision_synthesizer_node(state: TradingAgentState) -> Dict[str, Any]:
     position_assessments = state.get("position_assessments", [])
     candidate_assessments = state.get("candidate_assessments", [])
     risk = state.get("risk_review", {})
+    candidate_debug = state.get("candidate_debug", {})
     context = state["context"]
     acct = context.get("account", {})
     memory = state.get("memory_summary", {})
@@ -1406,6 +1443,7 @@ def run_decision_synthesizer_node(state: TradingAgentState) -> Dict[str, Any]:
         "buy_picks": data.get("buy_picks", []),
         "reasoning": data.get("reasoning", []),
         "new_entries": [],
+        "candidate_debug": candidate_debug,
     }
 
     # 从各子 Agent 收集推理链
@@ -1573,6 +1611,12 @@ def build_trading_agent_graph():
 
 def run_trading_agent_cycle(context: Dict[str, Any]) -> Dict[str, Any]:
     """执行一次完整的交易 Agent 决策周期，返回最终计划字典。异常时返回空安全计划。"""
+    context = dict(context or {})
+    if "candidates" not in context:
+        context["candidates"] = context.get("candidate_pool", [])
+    if "candidate_pool" not in context:
+        context["candidate_pool"] = context.get("candidates", [])
+
     now = beijing_now().strftime("%Y-%m-%d %H:%M:%S")
     cycle_id = context.get("cycle_id", "")
     with _agent_status_lock:
@@ -2863,41 +2907,45 @@ class AutonomousTradingEngine:
             return
         add_realtime_log("success", f"✅ 获取 {len(all_stocks)} 只股票行情")
 
-        # 取成交额前10只活跃股，附加技术指标+财务数据
+        # 取成交额前100只活跃股并生成轻量摘要
         candidates = sorted(all_stocks, key=lambda s: s.get("amount", 0), reverse=True)[:100]
+        add_realtime_log("info", f"🧺 候选池初筛: 从 {len(all_stocks)} 只股票中按成交额选出 {len(candidates)} 只活跃股")
         fin_data = fetch_financial_batch()
         candidates_ctx = []
-        for i, s in enumerate(candidates[:10]):
+        for stock in candidates:
+            enriched = dict(stock)
             try:
-                hist = fetch_history(s["symbol"], days=20)
+                hist = fetch_history(enriched["symbol"], days=20)
                 if hist:
                     indicators = calculate_indicators(hist)
-                    s.update(indicators)
+                    enriched.update(indicators)
                     closes = [h["close"] for h in hist[-5:]]
-                    s["ma5"] = round(float(np.mean(closes)), 2) if closes else s["price"]
-                    s["recent_high"] = max(h["high"] for h in hist[-5:])
-                    s["recent_low"] = min(h["low"] for h in hist[-5:])
-                    s["is_etf"] = is_etf_code(s["symbol"])
-                if not is_etf_code(s["symbol"]):
+                    enriched["ma5"] = round(float(np.mean(closes)), 2) if closes else enriched["price"]
+                    enriched["recent_high"] = max(h["high"] for h in hist[-5:])
+                    enriched["recent_low"] = min(h["low"] for h in hist[-5:])
+                enriched["is_etf"] = is_etf_code(enriched["symbol"])
+                if not enriched["is_etf"]:
                     try:
-                        val = fetch_valuation(s["symbol"])
+                        val = fetch_valuation(enriched["symbol"])
                         if val:
-                            s["pe"] = val.get("pe")
-                            s["pb"] = val.get("pb")
-                            s["total_mv"] = val.get("total_mv")
+                            enriched["pe"] = val.get("pe")
+                            enriched["pb"] = val.get("pb")
+                            enriched["total_mv"] = val.get("total_mv")
                     except Exception:
                         pass
-                fin = fin_data.get(s["symbol"], {})
+                fin = fin_data.get(enriched["symbol"], {})
                 if fin:
-                    s["net_profit_yoy"] = fin.get("net_profit_yoy")
-                    s["revenue_yoy"] = fin.get("revenue_yoy")
-                    s["eps"] = fin.get("eps")
-                candidates_ctx.append(s)
+                    enriched["net_profit_yoy"] = fin.get("net_profit_yoy")
+                    enriched["revenue_yoy"] = fin.get("revenue_yoy")
+                    enriched["eps"] = fin.get("eps")
             except Exception:
-                candidates_ctx.append(s)
+                pass
+            candidates_ctx.append(summarize_candidate_for_agent(enriched))
 
         market_sentiment = calculate_market_sentiment(all_stocks)
         add_realtime_log("info", f"📈 市场情绪: {market_sentiment['sentiment']} (分数: {market_sentiment['score']})")
+        candidate_preview = "，".join([f"{s.get('symbol','')}{s.get('name','')}" for s in candidates_ctx[:5]]) or "无"
+        add_realtime_log("info", f"🔎 候选池精筛完成: 保留 {len(candidates_ctx)} 只候选，前5只: {candidate_preview}")
 
         # ── 4. 账户信息 ──
         account_info = {
@@ -2924,6 +2972,16 @@ class AutonomousTradingEngine:
             memory_summary=recall_recent_agent_memory(db, limit=5),
         )
         decision = run_agent_cycle_with_fallback(db, agent_context)
+
+        candidate_debug = decision.get("candidate_debug", {})
+        input_count = candidate_debug.get("input_count", len(candidates_ctx))
+        selected_count = candidate_debug.get("selected_count", len(decision.get("buy_picks", [])))
+        rejected_by = candidate_debug.get("rejected_by", "")
+        rejected_reasons = candidate_debug.get("rejected_reasons", [])
+        add_realtime_log("info", f"🧾 本轮候选筛选结果: 输入 {input_count} 只，产出 {selected_count} 只")
+        if rejected_by:
+            reason_text = '；'.join([str(r) for r in rejected_reasons if r]) or '未提供具体原因'
+            add_realtime_log("warning", f"🚫 本轮候选被 {rejected_by} 否掉: {reason_text[:160]}")
 
         market_analysis = decision.get("market_analysis", "")
         risk_level = decision.get("risk_level", "mid")
@@ -3028,6 +3086,8 @@ class AutonomousTradingEngine:
 
         buy_picks = decision.get("buy_picks", [])
         if not buy_picks:
+            if not rejected_by and selected_count <= 0:
+                add_realtime_log("warning", "🚫 本轮无可执行买入候选，已被总指挥或风控收敛为不开仓")
             add_realtime_log("info", "⏸️ AI本轮不建议开新仓")
             log_decision(db, "hold", reason=f"AI综合决策: 本轮不开仓 - {market_analysis[:100]}")
             return
@@ -3107,6 +3167,11 @@ class AutonomousTradingEngine:
                 print(f"[AI] 买入 {sym} {name} {qty}股 @ {price} 止损{sl} AI信心{confidence}%")
 
         if not bought_this_round:
+            skipped_by_executor = max(0, len(buy_picks) - selected_count)
+            if buy_picks:
+                add_realtime_log("warning", f"🚫 候选已给出 {len(buy_picks)} 只，但执行层最终 0 只成交")
+            if skipped_by_executor > 0:
+                add_realtime_log("warning", f"🚫 其中 {skipped_by_executor} 只在执行层被资金/仓位/行情规则否掉")
             log_decision(db, "hold", reason=f"综合决策本轮未买入 ({len(buy_picks)}只候选均被过滤)")
 
 
