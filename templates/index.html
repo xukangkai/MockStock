@@ -6,6 +6,7 @@
 <link rel="icon" type="image/png" href="/static/favicon.png">
 <title>A股全自动智能交易系统</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
 <script>
   // Chart.js 加载检测
   if (typeof Chart === 'undefined') {
@@ -71,6 +72,8 @@ body {
 /* Two column */
 .cols-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 900px) { .cols-2 { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { #agentTeamGrid, #dashAgentTeamGrid { grid-template-columns: 1fr 1fr !important; } }
+@media (max-width: 560px) { #agentTeamGrid, #dashAgentTeamGrid { grid-template-columns: 1fr !important; } }
 
 /* Tables */
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -198,8 +201,197 @@ tr:hover td { background: rgba(255,255,255,0.03); }
 #realtimeLogs::-webkit-scrollbar-thumb:hover {
   background: #3a3a5a;
 }
+
+/* Agent Timeline */
+.timeline-item {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 10px;
+  position: relative;
+}
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.timeline-time { font-size: 12px; color: #64748b; }
+.timeline-status {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.timeline-status.ok { background: rgba(34,197,94,0.15); color: #4ade80; }
+.timeline-status.error { background: rgba(239,68,68,0.15); color: #ef4444; }
+.timeline-summary { font-size: 13px; color: #cbd5e1; margin-bottom: 8px; }
+.timeline-nodes {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.timeline-node {
+  background: #1e1e3a;
+  border: 1px solid #2a2a4a;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #93c5fd;
+}
+.timeline-node .node-name { font-weight: 600; }
+.timeline-reasoning {
+  font-size: 12px;
+  color: #94a3b8;
+  border-left: 2px solid #3b82f6;
+  padding-left: 10px;
+  margin-top: 6px;
+}
+.timeline-reasoning li { margin: 2px 0; }
+
+/* Memory Cards */
+.memory-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+}
+.memory-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.memory-type {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(139,92,246,0.15);
+  color: #c084fc;
+}
+.memory-date { font-size: 12px; color: #64748b; }
+.memory-content { font-size: 13px; color: #cbd5e1; }
+.memory-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.memory-tag {
+  font-size: 10px;
+  background: rgba(96,165,250,0.1);
+  color: #93c5fd;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Commander Card */
+.commander-card {
+  background: linear-gradient(135deg, #1a1a30 0%, #1a2a4a 100%);
+  border: 1px solid #3a4a6a;
+  border-radius: 14px;
+  padding: 20px 24px;
+  transition: all 0.3s;
+}
+.commander-card.thinking {
+  border-color: #60a5fa;
+  animation: commanderGlow 2s ease-in-out infinite;
+}
+.commander-card.done { border-color: rgba(34,197,94,0.4); }
+@keyframes commanderGlow {
+  0%,100% { box-shadow: 0 0 8px rgba(96,165,250,0.1); }
+  50% { box-shadow: 0 0 24px rgba(96,165,250,0.3); }
+}
+.commander-left { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+.commander-avatar {
+  width: 56px; height: 56px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+  box-shadow: 0 0 20px rgba(99,102,241,0.3);
+}
+.commander-name { font-size: 18px; font-weight: 700; }
+.commander-status {
+  font-size: 12px; color: #64748b; margin-top: 2px;
+}
+.commander-status.thinking { color: #60a5fa; }
+.commander-status.done { color: #4ade80; }
+.commander-body { min-height: 36px; }
+.commander-decision {
+  font-size: 16px; font-weight: 600; color: #4ade80;
+  background: rgba(34,197,94,0.08);
+  padding: 10px 16px; border-radius: 8px;
+  border-left: 3px solid #4ade80;
+}
+.commander-thinking {
+  font-size: 13px; color: #93c5fd;
+  padding: 8px 0;
+}
+
+/* Agent Character Cards */
+.agent-char {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid #2a2a4a;
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+.agent-char.idle { opacity: 0.45; }
+.agent-char.thinking {
+  border-color: #60a5fa;
+  background: rgba(96,165,250,0.04);
+  animation: agentPulse 1.5s ease-in-out infinite;
+}
+.agent-char.done {
+  border-color: rgba(34,197,94,0.25);
+  background: rgba(34,197,94,0.02);
+}
+@keyframes agentPulse {
+  0%,100% { box-shadow: 0 0 4px rgba(96,165,250,0.08); }
+  50% { box-shadow: 0 0 14px rgba(96,165,250,0.25); }
+}
+.agent-char-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.agent-char-avatar {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.agent-char-meta { flex: 1; min-width: 0; }
+.agent-char-name { font-size: 14px; font-weight: 600; }
+.agent-char-role { font-size: 11px; color: #64748b; }
+.agent-char-badge {
+  padding: 2px 10px; border-radius: 10px;
+  font-size: 10px; font-weight: 600;
+  white-space: nowrap;
+}
+.agent-char-badge.idle { background: rgba(100,116,139,0.15); color: #64748b; }
+.agent-char-badge.thinking { background: rgba(96,165,250,0.15); color: #60a5fa; }
+.agent-char-badge.done { background: rgba(34,197,94,0.15); color: #4ade80; }
+.agent-char-thinking {
+  font-size: 12px; color: #93c5fd;
+  min-height: 18px; line-height: 1.6;
+}
+.agent-char-result {
+  font-size: 12px; color: #4ade80;
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  min-height: 18px; line-height: 1.6;
+}
 </style>
-<link rel="stylesheet" href="/static/pet-widget.css">
+<link rel="stylesheet" href="/static/pet-widget.css?v=20260701-2">
 </head>
 <body>
 
@@ -207,6 +399,11 @@ tr:hover td { background: rgba(255,255,255,0.03); }
   <h1><span class="acc">⟠</span> A股全自动智能交易系统</h1>
   <div class="header-right">
     <span id="headerTime" style="color:#64748b"></span>
+    <!-- 运行模式按钮：仅控制界面轮询频率和状态显示，不影响真实交易时间校验 -->
+    <button id="forceDecisionBtn" class="btn btn-outline btn-sm" onclick="toggleForceDecisionMode()" style="font-size:12px;padding:5px 12px;display:flex;align-items:center;gap:5px;" title="仅控制界面刷新频率，真实买卖严格按A股交易时间执行">
+      <span id="forceDecisionIcon">📊</span>
+      <span id="forceDecisionText">持续运行中</span>
+    </button>
     <span class="engine-badge" id="engineBadge">
       <span class="dot" id="engineDot"></span>
       <span id="engineStatus">启动中...</span>
@@ -221,6 +418,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📈 交易面板</button>
     <button class="tab-btn" data-tab="history" onclick="switchTab('history')">📜 交易历史</button>
     <button class="tab-btn" data-tab="recommendations" onclick="switchTab('recommendations')">🌟 AI 智能推荐</button>
+    <button class="tab-btn" data-tab="agent" onclick="switchTab('agent')">🧠 Agent 决策链</button>
     <button class="tab-btn" data-tab="docs" onclick="switchTab('docs')">📖 系统说明</button>
   </div>
 
@@ -261,7 +459,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
           <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">买入最低评分</span><br><span style="font-size:18px;font-weight:600;color:#60a5fa" id="pMinScore">60</span></div>
           <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">期望年化</span><br><span style="font-size:18px;font-weight:600;color:#60a5fa" id="pTargetReturn">15%</span></div>
           <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">决策模型</span><br><span style="font-size:14px;font-weight:600;color:#c084fc" id="pAiModel">DeepSeek</span></div>
-          <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">AI 状态</span><br><span style="font-size:14px;font-weight:600;color:#4ade80" id="pAiStatus">已就绪</span></div>
+          <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">决策模式</span><br><span style="font-size:14px;font-weight:600;color:#64748b" id="pDecisionMode">按交易时间</span></div>
         </div>
       </div>
     </div>
@@ -274,30 +472,52 @@ tr:hover td { background: rgba(255,255,255,0.03); }
       <div id="portfolioContent" class="scroll"></div>
     </div>
     <div class="card">
-      <div class="card-title">引擎当前最优选股</div>
+      <div class="card-title">🎯 Agent 选股推荐 <span style="font-size:11px;color:#475569;font-weight:400;">（候选猎手 + 总指挥）</span></div>
       <div id="picksContent" class="scroll"></div>
     </div>
   </div>
 
-  <!-- 最近交易（简略） + 决策日志 -->
-  <div class="cols-2">
-    <div class="card">
-      <div class="card-title">最近交易 <a href="javascript:void(0)" onclick="switchTab('history')" style="font-size:11px;color:#60a5fa;text-decoration:none;font-weight:400;margin-left:auto;">查看全部 →</a></div>
-      <div id="recentTradesContent" class="scroll"></div>
+  <!-- Agent 决策链（首页核心区域） -->
+  <!-- 总指挥（主控 Agent） -->
+  <div id="dashboardCommanderCard" class="commander-card" style="margin-top:16px;">
+    <div class="commander-left">
+      <div class="commander-avatar" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;">
+        <i data-lucide="crosshair" style="color:#fff;width:28px;height:28px;"></i>
+      </div>
+      <div class="commander-info">
+        <div class="commander-name">总指挥 <span style="font-size:12px;color:#64748b;font-weight:400;">主控 Agent</span></div>
+        <div id="dashMainAgentStatus" class="commander-status">空闲</div>
+      </div>
+      <div style="margin-left:auto;text-align:right;">
+        <div style="font-size:11px;color:#64748b;">下次决策</div>
+        <div id="dashNextTick" style="font-size:16px;font-weight:600;color:#60a5fa;font-variant-numeric:tabular-nums;">--:--</div>
+      </div>
     </div>
-    <div class="card">
-      <div class="card-title">引擎决策日志</div>
-      <div id="decisionsContent" class="scroll"></div>
+    <div id="dashMainAgentContent" class="commander-body">
+      <div style="color:#64748b;font-size:13px;">等待下一次决策周期...</div>
     </div>
   </div>
 
-  <!-- 实时日志面板 -->
-  <div class="card" style="margin-top: 16px;">
-    <div class="card-title">
-      <span>📡 实时运行日志</span>
-      <span style="font-size: 11px; color: #64748b; font-weight: 400;">自动刷新</span>
+  <!-- 专家团队 + 最近决策时间线 -->
+  <div class="cols-2" style="margin-top:14px;">
+    <div class="card">
+      <div class="card-title">
+        <span>🤝 专家团队</span>
+        <span id="dashAgentTeamStatus" style="font-size:11px;color:#475569;font-weight:400;"></span>
+      </div>
+      <div id="dashAgentTeamGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+        <!-- 由 JS 动态生成 -->
+      </div>
     </div>
-    <div id="realtimeLogs" class="scroll" style="max-height: 400px; font-family: 'SF Mono', 'Monaco', 'Menlo', monospace; font-size: 12px; line-height: 1.8;"></div>
+    <div class="card">
+      <div class="card-title">
+        <span>🧠 最近 Agent 决策</span>
+        <a href="javascript:void(0)" onclick="switchTab('agent')" style="font-size:11px;color:#60a5fa;text-decoration:none;font-weight:400;margin-left:auto;">查看全部 →</a>
+      </div>
+      <div id="dashAgentTimeline" class="scroll" style="max-height:340px;">
+        <div class="loading"><div class="spinner"></div><br>加载中...</div>
+      </div>
+    </div>
   </div>
 
   </div>
@@ -350,6 +570,64 @@ tr:hover td { background: rgba(255,255,255,0.03); }
         </div>
       </div>
       <div id="recommendationsContent" class="scroll" style="max-height:600px;"></div>
+    </div>
+  </div>
+
+  <!-- Agent Decision Chain Tab -->
+  <div id="tab-agent" class="tab-content">
+
+    <!-- 👑 总指挥（主控 Agent）—— 顶部大卡片 -->
+    <div id="commanderCard" class="commander-card" style="margin-top:16px;">
+      <div class="commander-left">
+        <div class="commander-avatar" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;">
+          <i data-lucide="crosshair" style="color:#fff;width:28px;height:28px;"></i>
+        </div>
+      <div class="commander-info">
+        <div class="commander-name">总指挥 <span style="font-size:12px;color:#64748b;font-weight:400;">主控 Agent</span></div>
+        <div id="mainAgentStatus" class="commander-status">空闲</div>
+        </div>
+      </div>
+      <div id="mainAgentContent" class="commander-body">
+        <div style="color:#64748b;font-size:13px;">等待下一次决策周期...</div>
+      </div>
+    </div>
+
+    <!-- 🤝 子 Agent 团队 —— 6 个角色卡片 -->
+    <div class="card" style="margin-top:14px;">
+      <div class="card-title">
+        <span>🤝 专家团队</span>
+        <span id="agentTeamStatus" style="font-size:11px;color:#475569;font-weight:400;"></span>
+      </div>
+      <div id="agentTeamGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+        <!-- 由 JS 动态生成 -->
+      </div>
+    </div>
+
+    <!-- Agent 决策时间线 -->
+    <div class="card" style="margin-top: 16px;">
+      <div class="card-title" style="flex-wrap: wrap; gap: 12px;">
+        <span>🧠 Agent 决策时间线</span>
+        <button onclick="loadAgentTimeline()" style="background:#1e3a5f;color:#60a5fa;border:none;padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;">刷新</button>
+      </div>
+      <div id="agentTimelineContent" class="scroll" style="max-height:600px;">
+        <div class="loading"><div class="spinner"></div><br>加载中...</div>
+      </div>
+    </div>
+
+    <!-- Agent 记忆库 -->
+    <div class="card" style="margin-top: 16px;">
+      <div class="card-title" style="flex-wrap: wrap; gap: 12px;">
+        <span>📝 Agent 记忆库</span>
+        <div style="display:flex;gap:4px;">
+          <button class="budget-btn active" data-scope="" onclick="selectMemoryScope(this)">全部</button>
+          <button class="budget-btn" data-scope="reflection" onclick="selectMemoryScope(this)">日终总结</button>
+          <button class="budget-btn" data-scope="market" onclick="selectMemoryScope(this)">市场</button>
+          <button class="budget-btn" data-scope="strategy" onclick="selectMemoryScope(this)">策略</button>
+        </div>
+      </div>
+      <div id="agentMemoryContent" class="scroll" style="max-height:400px;">
+        <div class="loading"><div class="spinner"></div><br>加载中...</div>
+      </div>
     </div>
   </div>
 
@@ -615,6 +893,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
         <tr><td>行情数据</td><td>新浪财经 API</td><td>实时股票/ETF 行情</td></tr>
         <tr><td>财务数据</td><td>akshare</td><td>A股财报、估值数据</td></tr>
         <tr><td>AI 模型</td><td>阿里百炼 DeepSeek</td><td>兼容 OpenAI API 格式</td></tr>
+        <tr><td>Agent 框架</td><td>LangGraph</td><td>多节点有向图编排，6 步决策链</td></tr>
         <tr><td>前端</td><td>HTML + CSS + JS + Chart.js</td><td>单页面应用，30 秒自动刷新</td></tr>
         <tr><td>交易引擎</td><td>Python Thread (daemon)</td><td>后台线程，3 分钟心跳</td></tr>
       </table>
@@ -628,6 +907,9 @@ tr:hover td { background: rgba(255,255,255,0.03); }
         <tr><td><code>trades</code></td><td>交易记录（买卖历史、实现盈亏）</td></tr>
         <tr><td><code>decisions</code></td><td>决策日志（每次引擎动作/不动作的原因）</td></tr>
         <tr><td><code>snapshots</code></td><td>权益快照（用于绘制权益曲线）</td></tr>
+        <tr><td><code>agent_cycle_logs</code></td><td>Agent 决策周期记录（上下文、计划、推理链）</td></tr>
+        <tr><td><code>agent_node_logs</code></td><td>Agent 节点执行日志（输入输出摘要）</td></tr>
+        <tr><td><code>agent_memories</code></td><td>Agent 记忆库（日终总结、市场观察、策略反思）</td></tr>
       </table>
     </div>
 
@@ -682,14 +964,18 @@ async function refreshAll() {
   // 独立调用，互不影响
   loadDashboard().catch(e => console.error('dashboard', e));
   loadPortfolio().catch(e => console.error('portfolio', e));
-  loadRecentTrades().catch(e => console.error('trades', e));
   loadEngineStatus().catch(e => console.error('engine', e));
   // AI选股接口消耗 token，仅交易时间自动刷新
   if (isTradingHours()) {
     loadPicks().catch(e => console.error('picks', e));
   }
-  loadDecisions().catch(e => console.error('decisions', e));
-  loadRealtimeLogs().catch(e => console.error('logs', e));
+  // Agent 决策链（首页核心）
+  loadDashboardAgentTimeline().catch(e => console.error('dash agent timeline', e));
+  // Agent tab 专用数据（仅 tab 可见时加载）
+  if (document.getElementById('tab-agent').classList.contains('active')) {
+    loadAgentTimeline().catch(e => console.error('agent timeline', e));
+    loadAgentMemory().catch(e => console.error('agent memory', e));
+  }
   // 推荐接口耗时长（1-3分钟），不跟随自动刷新，仅手动触发
   document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString('zh-CN');
 }
@@ -878,7 +1164,73 @@ async function loadEngineStatus() {
   document.getElementById('pMinScore').textContent = s.min_score_to_buy;
   document.getElementById('pTargetReturn').textContent = s.target_annual_return;
   document.getElementById('pAiModel').textContent = s.ai_model || 'DeepSeek';
-  document.getElementById('pAiStatus').textContent = s.ai_configured ? '已就绪 ✅' : '未配置 ❌';
+
+  // 决策模式：明确区分界面模式和真实交易状态
+  const modeEl = document.getElementById('pDecisionMode');
+  if (s.force_decision_mode) {
+    modeEl.textContent = '界面持续运行';
+    modeEl.style.color = '#4ade80';
+  } else {
+    modeEl.textContent = '按交易时段';
+    modeEl.style.color = '#64748b';
+  }
+
+  // 真实交易时间小标签（显示在决策模式下方，给用户明确感知）
+  let modeSubEl = document.getElementById('pDecisionModeSub');
+  if (!modeSubEl) {
+    modeSubEl = document.createElement('div');
+    modeSubEl.id = 'pDecisionModeSub';
+    modeSubEl.style.fontSize = '11px';
+    modeSubEl.style.marginTop = '2px';
+    modeEl.parentNode.appendChild(modeSubEl);
+  }
+  if (s.real_trading_hours) {
+    modeSubEl.textContent = '✅ 真实交易时段（可执行买卖）';
+    modeSubEl.style.color = '#4ade80';
+  } else {
+    modeSubEl.textContent = '🌙 非交易时段（仅刷新，不执行买卖）';
+    modeSubEl.style.color = '#f59e0b';
+  }
+
+  // 更新运行模式按钮状态
+  updateForceDecisionBtn(s.force_decision_mode || false);
+}
+
+// 更新运行模式按钮显示
+function updateForceDecisionBtn(isForceMode) {
+  const btn = document.getElementById('forceDecisionBtn');
+  const icon = document.getElementById('forceDecisionIcon');
+  const text = document.getElementById('forceDecisionText');
+  if (isForceMode) {
+    btn.style.background = 'rgba(34,197,94,0.15)';
+    btn.style.borderColor = 'rgba(34,197,94,0.4)';
+    btn.style.color = '#4ade80';
+    icon.textContent = '📊';
+    text.textContent = '持续运行中';
+  } else {
+    btn.style.background = '';
+    btn.style.borderColor = '';
+    btn.style.color = '';
+    icon.textContent = '🕒';
+    text.textContent = '按交易时段';
+  }
+}
+
+// 切换运行模式（仅影响界面轮询频率，真实买卖仍严格按交易时间）
+async function toggleForceDecisionMode() {
+  try {
+    const res = await fetch('/api/engine/toggle-force-mode', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '操作失败');
+    updateForceDecisionBtn(data.force_decision_mode);
+    const modeText = data.force_decision_mode
+      ? '已开启持续运行模式（界面高频刷新，真实买卖仍按交易时间执行）'
+      : '已切换为按交易时段模式（界面按交易时间刷新，真实买卖仍按交易时间执行）';
+    console.log('[引擎]', modeText);
+    pollAgentStatus();
+  } catch(e) {
+    console.error('切换失败:', e);
+  }
 }
 
 async function loadPicks() {
@@ -933,8 +1285,8 @@ let _recommendationsCache = {};
 let _recommendationsLoadedOnce = false;
 
 function selectBudget(btn) {
-  // 更新按钮激活状态
-  document.querySelectorAll('.budget-btn').forEach(b => b.classList.remove('active'));
+  // 更新按钮激活状态（仅限预算选择器内的按钮）
+  document.querySelectorAll('#budgetSelector .budget-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   selectedBudget = btn.dataset.budget || '';
   // 重新加载推荐（优先从缓存读取）
@@ -1036,6 +1388,12 @@ function switchTab(tabName) {
   if (tabName === 'history') {
     loadTrades().catch(e => console.error('trades', e));
   }
+  if (tabName === 'agent') {
+    startAgentStatusPolling();
+    loadAgentTimeline().catch(e => console.error('agent timeline', e));
+    loadAgentMemory().catch(e => console.error('agent memory', e));
+  }
+  // Agent 轮询在首页和 agent tab 都保持运行，不在此停止
 }
 
 async function loadDecisions() {
@@ -1092,6 +1450,386 @@ async function loadRealtimeLogs() {
   } catch(e) {}
 }
 
+// ── HTML Escape Helper ──
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// ── 倒计时更新 ──
+let _remainingSeconds = 0;
+let _lastUpdateTime = 0;
+let _countdownInterval = null;
+
+function _updateNextTick(s) {
+  const el = document.getElementById('dashNextTick');
+  if (!el) return;
+  
+  const tickStatus = s.tick_status || 'stopped';
+  const realHours = s.real_trading_hours === true;
+  
+  // 停止倒计时定时器
+  if (_countdownInterval) {
+    clearInterval(_countdownInterval);
+    _countdownInterval = null;
+  }
+  
+  switch (tickStatus) {
+    case 'stopped':
+      el.textContent = '已停止';
+      el.style.color = '#ef4444';
+      _setCountdownHint('');
+      break;
+    case 'closed':
+      el.textContent = '休市中';
+      el.style.color = '#64748b';
+      _setCountdownHint('休市时段，按真实交易时间恢复');
+      break;
+    case 'forced':
+      if (!realHours) {
+        // 界面持续运行中，但非真实交易时段
+        if (s.next_tick_remaining >= 0) {
+          _remainingSeconds = s.next_tick_remaining;
+          _lastUpdateTime = Date.now();
+          _renderCountdown();
+          _countdownInterval = setInterval(_renderCountdown, 1000);
+          el.style.color = '#f59e0b';
+        } else {
+          el.textContent = '--:--';
+          el.style.color = '#64748b';
+        }
+        _setCountdownHint('🌙 仅刷新持仓，不执行买卖');
+      } else {
+        // 真实交易时段，正常显示倒计时
+        if (s.next_tick_remaining >= 0) {
+          _remainingSeconds = s.next_tick_remaining;
+          _lastUpdateTime = Date.now();
+          _renderCountdown();
+          _countdownInterval = setInterval(_renderCountdown, 1000);
+        } else {
+          el.textContent = '--:--';
+          el.style.color = '#64748b';
+        }
+        _setCountdownHint('✅ 真实交易时段，可执行买卖');
+      }
+      break;
+    case 'trading':
+      if (s.next_tick_remaining >= 0) {
+        _remainingSeconds = s.next_tick_remaining;
+        _lastUpdateTime = Date.now();
+        _renderCountdown();
+        _countdownInterval = setInterval(_renderCountdown, 1000);
+      } else {
+        el.textContent = '--:--';
+        el.style.color = '#64748b';
+      }
+      _setCountdownHint('✅ 真实交易时段，可执行买卖');
+      break;
+  }
+}
+
+function _setCountdownHint(text) {
+  let hint = document.getElementById('dashNextTickHint');
+  if (!hint) {
+    const el = document.getElementById('dashNextTick');
+    if (!el) return;
+    hint = document.createElement('div');
+    hint.id = 'dashNextTickHint';
+    hint.style.fontSize = '11px';
+    hint.style.marginTop = '2px';
+    hint.style.opacity = '0.85';
+    el.parentNode.appendChild(hint);
+  }
+  hint.textContent = text || '';
+  if (!text) {
+    hint.style.display = 'none';
+  } else {
+    hint.style.display = 'block';
+    if (text.indexOf('✅') >= 0) hint.style.color = '#4ade80';
+    else if (text.indexOf('🌙') >= 0) hint.style.color = '#f59e0b';
+    else hint.style.color = '#64748b';
+  }
+}
+
+function _renderCountdown() {
+  const el = document.getElementById('dashNextTick');
+  if (!el) return;
+  
+  // 根据本地时间流逝估算剩余秒数
+  const elapsed = Math.floor((Date.now() - _lastUpdateTime) / 1000);
+  const diff = Math.max(0, _remainingSeconds - elapsed);
+  
+  if (diff <= 0) {
+    el.textContent = '即将决策';
+    el.style.color = '#4ade80';
+  } else {
+    const min = Math.floor(diff / 60);
+    const sec = diff % 60;
+    el.textContent = `${min}:${sec.toString().padStart(2, '0')}`;
+    el.style.color = diff < 30 ? '#4ade80' : '#60a5fa';
+  }
+}
+
+// ── Agent 实时状态轮询（多 Agent 看板） ──
+let agentStatusInterval = null;
+
+async function pollAgentStatus() {
+  try {
+    const s = await api('/api/agent/status');
+
+    // ── 更新首页 Agent 决策链 ──
+    _updateCommanderAndTeam(s, 'dashboardCommanderCard', 'dashMainAgentContent', 'dashMainAgentStatus', 'dashAgentTeamGrid', 'dashAgentTeamStatus');
+
+    // ── 更新 Agent tab 决策链 ──
+    _updateCommanderAndTeam(s, 'commanderCard', 'mainAgentContent', 'mainAgentStatus', 'agentTeamGrid', 'agentTeamStatus');
+  } catch(e) {
+    // 静默失败
+  }
+}
+
+function _updateCommanderAndTeam(s, cardId, mainElId, mainStatusId, gridId, teamStatusId) {
+  const card = document.getElementById(cardId);
+  const mainEl = document.getElementById(mainElId);
+  const mainStatus = document.getElementById(mainStatusId);
+  const gridEl = document.getElementById(gridId);
+  const teamStatus = document.getElementById(teamStatusId);
+  if (!mainEl || !gridEl) return;
+
+  // ── 更新倒计时（仅首页）──
+  if (cardId === 'dashboardCommanderCard') {
+    _updateNextTick(s);
+  }
+
+  // ── 总指挥 ──
+  const ma = s.main_agent || {};
+  const maCls = ma.status || 'idle';
+  if (card) card.className = 'commander-card ' + maCls;
+  const maLabel = ({idle:'空闲',thinking:'指挥中...',done:'已完成'})[maCls] || '空闲';
+  mainStatus.className = 'commander-status ' + maCls;
+  mainStatus.textContent = maLabel;
+  if (ma.status === 'thinking') {
+    mainEl.innerHTML = `<div class="commander-thinking">💭 ${esc(ma.thinking)}</div>`;
+  } else if (ma.status === 'done' && ma.decision) {
+    mainEl.innerHTML = `<div class="commander-decision">📋 最终决策: ${esc(ma.decision)}</div>`;
+  } else {
+    mainEl.innerHTML = '<div style="color:#64748b;font-size:13px;">等待下一次决策周期...</div>';
+  }
+
+  // ── 子 Agent 团队 ──
+  const agents = s.sub_agents || {};
+  const agentCards = [
+    { key: 'memory',
+      icon: 'book-open',
+      bg: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+      role: '检索历史记忆与决策经验' },
+    { key: 'market',
+      icon: 'trending-up',
+      bg: 'linear-gradient(135deg,#3b82f6,#06b6d4)',
+      role: '分析市场情绪与大盘格局' },
+    { key: 'position',
+      icon: 'briefcase',
+      bg: 'linear-gradient(135deg,#f59e0b,#ef4444)',
+      role: '审视持仓决定加减退持' },
+    { key: 'researcher',
+      icon: 'search',
+      bg: 'linear-gradient(135deg,#10b981,#14b8a6)',
+      role: '筛选潜力候选标的' },
+    { key: 'risk',
+      icon: 'shield-check',
+      bg: 'linear-gradient(135deg,#ef4444,#f97316)',
+      role: '评估组合风险与止损' },
+    { key: 'synthesizer',
+      icon: 'sparkles',
+      bg: 'linear-gradient(135deg,#8b5cf6,#ec4899)',
+      role: '综合分析制定最终计划' },
+  ];
+  let gridHtml = '';
+  let doneCount = 0;
+  agentCards.forEach(ac => {
+    const ag = agents[ac.key] || {};
+    const cls = ag.status || 'idle';
+    if (cls === 'done') doneCount++;
+    const statusLabel = ({idle:'等待中',thinking:'工作中',done:'已完成'})[cls] || '等待中';
+    const name = ag.name || ac.key;
+    const thinkingHtml = ag.thinking
+      ? `<div class="agent-char-thinking">💭 ${esc(ag.thinking)}</div>`
+      : (cls === 'idle' ? `<div class="agent-char-thinking" style="color:#475569;">等待指令...</div>` : '');
+    const resultHtml = ag.result
+      ? `<div class="agent-char-result">✅ ${esc(ag.result)}</div>`
+      : '';
+    gridHtml += `<div class="agent-char ${cls}">
+      <div class="agent-char-header">
+        <div class="agent-char-avatar" style="background:${ac.bg};display:flex;align-items:center;justify-content:center;border:none;">
+          <i data-lucide="${ac.icon}" style="color:#fff;width:20px;height:20px;"></i>
+        </div>
+        <div class="agent-char-meta">
+          <div class="agent-char-name">${esc(name)}</div>
+          <div class="agent-char-role">${ac.role}</div>
+        </div>
+        <span class="agent-char-badge ${cls}">${statusLabel}</span>
+      </div>
+      ${thinkingHtml}
+      ${resultHtml}
+    </div>`;
+  });
+  gridEl.innerHTML = gridHtml;
+  if (teamStatus) teamStatus.textContent = s.running ? `${doneCount}/6 已完成` : (doneCount > 0 ? '上轮 6/6 已完成' : '');
+  if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    window.lucide.createIcons();
+  }
+}
+
+// 每 1 秒轮询一次状态（首页或 Agent tab 可见时）
+function startAgentStatusPolling() {
+  if (agentStatusInterval) return;
+  pollAgentStatus();
+  agentStatusInterval = setInterval(pollAgentStatus, 1000);
+}
+function stopAgentStatusPolling() {
+  if (agentStatusInterval) { clearInterval(agentStatusInterval); agentStatusInterval = null; }
+}
+// 页面加载后立即启动 Agent 轮询
+startAgentStatusPolling();
+
+// ── Agent Timeline ──
+// ── 中文翻译映射 ──
+const ZH = {
+  // 市场格局
+  bullish: '看涨', bearish: '看跌', defensive: '防御', neutral: '中性',
+  // 风险等级
+  high: '高', medium: '中等', low: '低',
+  // 仓位偏好
+  aggressive: '进攻型', conservative: '保守型', balanced: '均衡型',
+  // 交易动作
+  hold: '持有', exit: '退出', reduce: '减仓', add: '加仓', buy: '买入',
+  // 状态
+  ok: '正常', success: '成功', error: '失败',
+};
+function zh(key) { return ZH[key] || key; }
+
+async function loadAgentTimeline() {
+  try {
+    const data = await api('/api/agent/cycles?limit=20');
+    const el = document.getElementById('agentTimelineContent');
+    if (!data || data.length === 0) {
+      el.innerHTML = '<div class="empty-state">暂无 Agent 决策记录<br><span style="font-size:12px;color:#475569;">引擎启动后，每 3 分钟生成一次决策链</span></div>';
+      return;
+    }
+    el.innerHTML = data.map(c => {
+      const nodesHtml = (c.nodes || []).map(n =>
+        `<div class="timeline-node"><span class="node-name">${esc(n.node_name)}</span></div>`
+      ).join('');
+      const reasoningHtml = (c.reasoning || []).length > 0
+        ? `<ul class="timeline-reasoning">${c.reasoning.map(r => `<li>${esc(r)}</li>`).join('')}</ul>`
+        : '';
+      const plan = c.plan || {};
+      const actions = plan.position_actions || [];
+      const buys = plan.buy_picks || [];
+      const actionSummary = [];
+      actions.forEach(a => actionSummary.push(`${zh(a.action||'?')} ${esc(a.symbol||'')}`));
+      buys.forEach(b => actionSummary.push(`买入 ${esc(b.symbol||'')}`));
+      const actionHtml = actionSummary.length > 0
+        ? `<div style="font-size:11px;color:#facc15;margin-top:4px;">动作: ${actionSummary.join('，')}</div>`
+        : '';
+      // 额外信息行
+      const metaParts = [];
+      if (plan.risk_level) metaParts.push(`风险: ${zh(plan.risk_level)}`);
+      if (plan.portfolio_bias) metaParts.push(`偏好: ${zh(plan.portfolio_bias)}`);
+      if (plan.cash_reserve_target != null) metaParts.push(`现金保留: ${(plan.cash_reserve_target*100).toFixed(0)}%`);
+      if (plan.confidence) metaParts.push(`信心: ${(plan.confidence*100).toFixed(0)}%`);
+      const metaHtml = metaParts.length > 0
+        ? `<div style="font-size:11px;color:#94a3b8;margin-top:4px;">${metaParts.join(' · ')}</div>`
+        : '';
+      return `<div class="timeline-item">
+        <div class="timeline-header">
+          <span class="timeline-time">${esc(c.created_at)}</span>
+          <span class="timeline-status ${c.status === 'ok' || c.status === 'success' ? 'ok' : 'error'}">${zh(c.status)}</span>
+        </div>
+        ${c.summary ? `<div class="timeline-summary">市场格局: <strong>${zh(c.summary)}</strong></div>` : ''}
+        ${nodesHtml ? `<div class="timeline-nodes">${nodesHtml}</div>` : ''}
+        ${metaHtml}
+        ${reasoningHtml}
+        ${actionHtml}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('agentTimelineContent').innerHTML = '<div class="empty-state">加载失败</div>';
+  }
+}
+
+// ── 首页 Agent 决策时间线（精简版，最近5条） ──
+async function loadDashboardAgentTimeline() {
+  try {
+    const data = await api('/api/agent/cycles?limit=5');
+    const el = document.getElementById('dashAgentTimeline');
+    if (!data || data.length === 0) {
+      el.innerHTML = '<div class="empty-state">暂无 Agent 决策记录<br><span style="font-size:12px;color:#475569;">引擎启动后，每 3 分钟生成一次决策链</span></div>';
+      return;
+    }
+    el.innerHTML = data.map(c => {
+      const nodesHtml = (c.nodes || []).map(n =>
+        `<div class="timeline-node"><span class="node-name">${esc(n.node_name)}</span></div>`
+      ).join('');
+      const plan = c.plan || {};
+      const actions = plan.position_actions || [];
+      const buys = plan.buy_picks || [];
+      const actionSummary = [];
+      actions.forEach(a => actionSummary.push(`${zh(a.action||'?')} ${esc(a.symbol||'')}`));
+      buys.forEach(b => actionSummary.push(`买入 ${esc(b.symbol||'')}`));
+      const actionHtml = actionSummary.length > 0
+        ? `<div style="font-size:11px;color:#facc15;margin-top:4px;">动作: ${actionSummary.join('，')}</div>`
+        : '';
+      return `<div class="timeline-item">
+        <div class="timeline-header">
+          <span class="timeline-time">${esc(c.created_at)}</span>
+          <span class="timeline-status ${c.status === 'ok' || c.status === 'success' ? 'ok' : 'error'}">${zh(c.status)}</span>
+        </div>
+        ${c.summary ? `<div class="timeline-summary">市场格局: <strong>${zh(c.summary)}</strong></div>` : ''}
+        ${nodesHtml ? `<div class="timeline-nodes">${nodesHtml}</div>` : ''}
+        ${actionHtml}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    const el = document.getElementById('dashAgentTimeline');
+    if (el) el.innerHTML = '<div class="empty-state">加载失败</div>';
+  }
+}
+
+// ── Agent Memory ──
+let currentMemoryScope = '';
+
+function selectMemoryScope(btn) {
+  document.querySelectorAll('[data-scope]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentMemoryScope = btn.dataset.scope || '';
+  loadAgentMemory();
+}
+
+async function loadAgentMemory() {
+  try {
+    const scopeParam = currentMemoryScope ? `?scope=${currentMemoryScope}` : '';
+    const data = await api(`/api/agent/memory${scopeParam}`);
+    const el = document.getElementById('agentMemoryContent');
+    if (!data || data.length === 0) {
+      el.innerHTML = '<div class="empty-state">暂无 Agent 记忆<br><span style="font-size:12px;color:#475569;">系统会在每次决策后积累记忆</span></div>';
+      return;
+    }
+    el.innerHTML = data.map(m => {
+      const content = m.content || {};
+      const contentStr = typeof content === 'object' ? JSON.stringify(content, null, 1) : String(content);
+      const tags = (m.tags || '').split(':').filter(Boolean);
+      const tagsHtml = tags.map(t => `<span class="memory-tag">${esc(t)}</span>`).join('');
+      return `<div class="memory-card">
+        <div class="memory-header">
+          <span class="memory-type">${esc(m.memory_type)}</span>
+          <span class="memory-date">${esc(m.memory_date)}</span>
+        </div>
+        <div class="memory-content"><pre style="white-space:pre-wrap;font-size:12px;color:#94a3b8;margin:0;">${esc(contentStr)}</pre></div>
+        ${tagsHtml ? `<div class="memory-tags">${tagsHtml}</div>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('agentMemoryContent').innerHTML = '<div class="empty-state">加载失败</div>';
+  }
+}
+
 async function resetAccount() {
   const cash = prompt('请输入初始模拟金额(元)：', '100000');
   if (!cash || isNaN(cash)) return;
@@ -1132,8 +1870,23 @@ updateRefreshInterval();
 setInterval(updateRefreshInterval, 60000); // 每分钟检查是否需要调整间隔
 
 // Cleanup
-window.addEventListener('beforeunload', () => { if (refreshInterval) clearInterval(refreshInterval); });
+window.addEventListener('beforeunload', () => {
+  if (refreshInterval) clearInterval(refreshInterval);
+  if (agentStatusInterval) clearInterval(agentStatusInterval);
+  if (_countdownInterval) clearInterval(_countdownInterval);
+});
+
+// ── Lucide 图标渲染初始化 ──
+function _initLucideIcons() {
+  if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    window.lucide.createIcons();
+    console.log('[系统] Lucide 图标渲染完成');
+  } else {
+    setTimeout(_initLucideIcons, 200);
+  }
+}
+_initLucideIcons();
 </script>
-<script src="/static/pet-widget.js"></script>
+<script src="/static/pet-widget.js?v=20260701-2"></script>
 </body>
 </html>

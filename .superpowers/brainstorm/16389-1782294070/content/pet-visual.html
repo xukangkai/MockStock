@@ -1,0 +1,82 @@
+<h2>仓鼠的视觉风格 🎨</h2>
+<p class="subtitle">技术实现方式决定了仓鼠长什么样、动起来怎么样</p>
+
+<div class="cards">
+  <div class="card" data-choice="emoji" onclick="toggleSelect(this)">
+    <div class="card-image" style="text-align:center;padding:24px 0;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px;">
+        <span style="font-size:60px;">🐹</span>
+        <span style="font-size:32px;">+</span>
+        <span style="font-size:32px;">😡</span>
+        <span style="font-size:32px;">😊</span>
+        <span style="font-size:32px;">🎩</span>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:#94a3b8;">
+        大 emoji 组合 + CSS 缩放动画
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Emoji 组合</h3>
+      <p>开发最快，几小时就能跑起来。缺点：emoji 风格固定，胖瘦靠缩放，表现力有限</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>优点</h4><ul><li>开发极快</li><li>无需美术资源</li><li>跨平台兼容</li></ul></div>
+        <div class="cons"><h4>缺点</h4><ul><li>外观不可定制</li><li>动画僵硬</li><li>进化形态靠 emoji 拼接，略显粗糙</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="pixel" onclick="toggleSelect(this)">
+    <div class="card-image" style="text-align:center;padding:24px 0;image-rendering:pixelated;">
+      <div style="display:flex;align-items:flex-end;justify-content:center;gap:16px;">
+        <div style="width:40px;height:40px;background:#f59e0b;border-radius:50%;position:relative;">
+          <div style="position:absolute;top:8px;left:8px;width:4px;height:4px;background:#000;border-radius:50%;"></div>
+          <div style="position:absolute;top:8px;right:8px;width:4px;height:4px;background:#000;border-radius:50%;"></div>
+          <div style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);width:8px;height:3px;background:#fff;border-radius:0 0 4px 4px;"></div>
+        </div>
+        <div style="font-size:20px;color:#94a3b8;">→</div>
+        <div style="width:64px;height:64px;background:#f59e0b;border-radius:50%;position:relative;">
+          <div style="position:absolute;top:16px;left:14px;width:6px;height:6px;background:#000;border-radius:50%;"></div>
+          <div style="position:absolute;top:16px;right:14px;width:6px;height:6px;background:#000;border-radius:50%;"></div>
+          <div style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);width:14px;height:5px;background:#fff;border-radius:0 0 7px 7px;"></div>
+          <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);width:20px;height:10px;background:#222;border-radius:4px 4px 0 0;"></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:#94a3b8;">
+        CSS 绘制像素仓鼠，完全自定义
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. CSS/SVG 绘制</h3>
+      <p>用代码画仓鼠，每个状态都是独立的图形。胖瘦、表情、装备全可控</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>优点</h4><ul><li>外观完全可控</li><li>动画流畅</li><li>无需外部图片</li></ul></div>
+        <div class="cons"><h4>缺点</h4><ul><li>开发时间较长</li><li>CSS 画图表现力有限</li><li>复杂形态难实现</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="canvas" onclick="toggleSelect(this)">
+    <div class="card-image" style="text-align:center;padding:24px 0;">
+      <div style="background:#1a1a2e;border-radius:8px;padding:16px;display:inline-block;">
+        <div style="font-family:monospace;font-size:11px;color:#f59e0b;line-height:1.4;">
+          &nbsp;&nbsp;●●●<br>
+         ●&nbsp;◉&nbsp;◉&nbsp;●<br>
+        ●&nbsp;&nbsp;▽&nbsp;&nbsp;●<br>
+         ●●●●●<br>
+        &nbsp;&nbsp;🎩<br>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:#94a3b8;">
+        Canvas/字符画，可动画可交互
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Canvas 动画</h3>
+      <p>HTML5 Canvas 实时绘制，支持帧动画、物理效果（弹跳、摇晃）</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>优点</h4><ul><li>动画最流畅</li><li>可做复杂动作</li><li>交互性强</li></ul></div>
+        <div class="cons"><h4>缺点</h4><ul><li>开发最复杂</li><li>需要像素图素材</li><li>代码量大</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
