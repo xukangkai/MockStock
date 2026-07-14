@@ -1877,6 +1877,40 @@ def calc_trade_qty_from_delta(delta_amount: float, price: float) -> int:
     return round_lot(raw_qty)
 
 
+def parse_confidence(value) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(confidence):
+        return None
+    return round(confidence, 2)
+
+
+def format_confidence(confidence: Optional[float]) -> str:
+    if confidence is None:
+        return "unknown"
+    if float(confidence).is_integer():
+        return f"{int(confidence)}%"
+    return f"{confidence}%"
+
+
+def should_skip_buy_pick(confidence: Optional[float], quote_pct: float, is_etf: bool,
+                         now_time: dtime, min_confidence: float, max_chase_pct: float,
+                         late_buy_cutoff: dtime) -> Optional[str]:
+    if confidence is None:
+        return "买入信心缺失"
+    if confidence <= min_confidence:
+        return f"买入信心不足: {format_confidence(confidence)} <= {format_confidence(min_confidence)}"
+    if now_time >= late_buy_cutoff:
+        return f"尾盘不新开仓: {now_time.strftime('%H:%M')} >= {late_buy_cutoff.strftime('%H:%M')}"
+    if not is_etf and quote_pct > max_chase_pct:
+        return f"涨幅过高不追: {quote_pct:.1f}% > {max_chase_pct:.1f}%"
+    return None
+
+
 def normalize_position_action(item: Dict) -> str:
     action = str(item.get("action", "hold")).lower().strip()
     if action in {"add", "hold", "reduce", "exit"}:
@@ -2698,22 +2732,26 @@ class AutonomousTradingEngine:
         self._last_tick_at: Optional[datetime] = None  # 上次决策完成时间
         self._next_tick_at: Optional[datetime] = None  # 下次决策预计时间
 
-        # 策略参数 - 平衡激进型（适合新手+追求高收益）
+        # 策略参数 - 保守增强型（控制大亏、减少追高，适配1万元账户）
         self.initial_cash = 10000.0              # 初始资金1万元
-        self.target_annual_return = 0.28         # 目标年化28%（平衡激进）
+        self.target_annual_return = 0.18         # 目标年化18%（优先稳定性）
         self.max_positions = 3                   # 最大持仓3只
-        self.take_profit_pct = 12.0              # 止盈线12%（比15%低，更快落袋）
-        self.stop_loss_pct = 5.0                 # 止损线5%（严格止损）
+        self.take_profit_pct = 12.0              # 利润管理区12%
+        self.stop_loss_pct = 5.0                 # 硬止损线5%
         self.trailing_stop_pct = 8.0             # 移动止损8%（保护盈利）
-        self.max_position_pct = 50.0             # 单标的最大仓位50%
-        self.risk_per_trade_pct = 2.0            # 单笔风险2%
-        self.min_score_to_buy = 68.0             # 买入最低评分68（适中标准）
-        self.max_buy_per_day = 8000.0            # 每日最大买入8000元
+        self.max_position_pct = 30.0             # 单标的最大仓位30%
+        self.risk_per_trade_pct = 1.5            # 单笔风险1.5%
+        self.min_score_to_buy = 68.0             # 保留旧评分字段兼容
+        self.min_buy_confidence = 70.0           # 买入信心必须大于70%
+        self.max_chase_pct = 7.0                 # 非ETF当日涨幅超过7%不追
+        self.late_buy_cutoff = dtime(14, 30)     # 14:30后不新开仓
+        self.profit_protect_pct = 6.0            # 盈利6%后保护成本线
+        self.max_buy_per_day = 5000.0            # 每日最大买入5000元
         self.top_picks_count = 25                # 选股池25只
-        self.scan_interval = 180                 # 扫描间隔3分钟（适中频率）
+        self.scan_interval = 180                 # 扫描间隔3分钟
         self.min_cash_reserve = 1000.0           # 最低保留现金1000元
-        self.single_buy_min = 3000.0             # 单笔买入最低3000元
-        self.single_buy_max = 5000.0             # 单笔买入最高5000元
+        self.single_buy_min = 2000.0             # 单笔买入最低2000元
+        self.single_buy_max = 3000.0             # 单笔买入最高3000元
 
     def start(self):
         if self._running:
@@ -2865,6 +2903,7 @@ class AutonomousTradingEngine:
 
         # ── 2. 先执行硬性风控（止损/止盈线触发，不依赖AI） ──
         sold_symbols = set()
+        risk_blocked_symbols = set()
         remaining_positions = []
         for pos in positions:
             quote = fetch_quote(pos.symbol)
@@ -2872,25 +2911,36 @@ class AutonomousTradingEngine:
             avg_cost = pos.avg_cost
             pnl_pct = (price / avg_cost - 1) * 100 if avg_cost else 0
             avails = calc_available_to_sell(db, pos.symbol)
+
+            if pnl_pct >= self.profit_protect_pct:
+                protected_stop = round(max(pos.stop_loss or 0, pos.avg_cost), 3)
+                if protected_stop > (pos.stop_loss or 0):
+                    pos.stop_loss = protected_stop
+                    add_realtime_log("info", f"🛡️ 盈利保护: {pos.symbol} 止损上移至成本线 ¥{protected_stop:.3f}")
+                    log_decision(db, "hold", pos.symbol, pos.name, price, reason=f"盈利保护: 止损上移至成本线 ¥{protected_stop:.3f}")
+
             if avails <= 0:
+                if should_force_exit(pnl_pct, self.stop_loss_pct):
+                    risk_blocked_symbols.add(pos.symbol)
+                    add_realtime_log("warning", f"⏳ {pos.symbol} 触发硬止损但受T+1限制暂无可卖数量")
+                    log_decision(db, "skip", pos.symbol, pos.name, price, reason=f"硬止损待执行: T+1限制，当前盈亏{pnl_pct:.1f}%")
                 continue
 
-            # 极端止损兜底（-20%），防止AI决策失效时的灾难性亏损
-            if pnl_pct <= -20:
-                add_realtime_log("warning", f"🚨 极端止损兜底: {pos.symbol} {pnl_pct:.1f}% <= -20%")
+            hit_config_stop = should_force_exit(pnl_pct, self.stop_loss_pct)
+            hit_price_stop = bool(pos.stop_loss and price <= pos.stop_loss)
+            if hit_config_stop or hit_price_stop:
+                stop_reason = f"硬止损: {pnl_pct:.1f}% <= -{self.stop_loss_pct:.1f}%" if hit_config_stop else f"跌破止损价: ¥{price:.2f} <= ¥{pos.stop_loss:.2f}"
+                add_realtime_log("warning", f"🚨 {stop_reason}，准备退出 {pos.symbol}")
                 result = exec_sell(db, pos.symbol, price, avails,
-                                   reason=f"极端止损兜底: {pnl_pct:.1f}% <= -20%",
+                                   reason=stop_reason,
                                    is_etf=is_etf_code(pos.symbol))
                 if result["ok"]:
-                    add_realtime_log("success", f"✅ 极端止损卖出: {pos.symbol} @ ¥{price:.2f}")
+                    add_realtime_log("success", f"✅ 风控卖出: {pos.symbol} {avails}股 @ ¥{price:.2f}")
                     sold_symbols.add(pos.symbol)
                 continue
 
-            # 正常止盈/止损交给 Agent 决策，此处仅记录供 Agent 参考
             if pnl_pct >= self.take_profit_pct:
                 add_realtime_log("info", f"📌 利润管理区: {pos.symbol} {pnl_pct:.1f}% >= {self.take_profit_pct:.1f}%（交由Agent决策）")
-            elif pnl_pct <= -self.stop_loss_pct:
-                add_realtime_log("info", f"⚠️ 亏损关注区: {pos.symbol} {pnl_pct:.1f}% <= -{self.stop_loss_pct:.1f}%（交由Agent决策）")
 
             remaining_positions.append(pos)
 
@@ -3004,6 +3054,11 @@ class AutonomousTradingEngine:
             pos = db.query(PositionModel).filter(PositionModel.symbol == sym, PositionModel.qty > 0).first()
             if not pos or sym in sold_symbols:
                 continue
+            if sym in risk_blocked_symbols:
+                add_realtime_log("warning", f"🚫 {sym} 硬止损待执行，跳过AI持仓动作 {action}")
+                log_decision(db, "skip", sym, pos.name, pos.last_price or pos.avg_cost, score=confidence,
+                             reason=f"硬止损待执行: T+1限制，禁止AI加仓/调仓 ({action})")
+                continue
 
             avails = calc_available_to_sell(db, sym)
             quote = fetch_quote(sym)
@@ -3112,7 +3167,7 @@ class AutonomousTradingEngine:
 
             name = pick.get("name", sym)
             sl = pick.get("stop_loss", 0) or 0
-            confidence = pick.get("confidence", 0)
+            confidence = parse_confidence(pick.get("confidence"))
             reason = pick.get("reason", "AI推荐")
 
             quote = fetch_quote(sym)
@@ -3122,6 +3177,20 @@ class AutonomousTradingEngine:
                 continue
             price = quote["price"]
             is_etf = is_etf_code(sym)
+            quote_pct = float(quote.get("pct", 0) or 0)
+            skip_reason = should_skip_buy_pick(
+                confidence=confidence,
+                quote_pct=quote_pct,
+                is_etf=is_etf,
+                now_time=beijing_now().time(),
+                min_confidence=self.min_buy_confidence,
+                max_chase_pct=self.max_chase_pct,
+                late_buy_cutoff=self.late_buy_cutoff,
+            )
+            if skip_reason:
+                add_realtime_log("warning", f"🚫 跳过 {sym} {name}: {skip_reason}")
+                log_decision(db, "skip", sym, name, price, score=confidence, reason=skip_reason)
+                continue
             if sl == 0:
                 sl = round(price * 0.95, 3)
 
@@ -3152,11 +3221,12 @@ class AutonomousTradingEngine:
                 log_decision(db, "skip", sym, name, price, reason=f"超每日限额: ¥{self._buy_amount_today:.0f}+¥{gross:.0f} > ¥{self.max_buy_per_day:.0f}")
                 continue
 
-            add_realtime_log("ai", f"🚀 AI综合决策买入 {sym} {name} (信心{confidence}%)")
-            reason_str = f"AI决策(信心{confidence}%): {reason[:100]}"
+            confidence_text = format_confidence(confidence)
+            add_realtime_log("ai", f"🚀 AI综合决策买入 {sym} {name} (信心{confidence_text})")
+            reason_str = f"AI决策(信心{confidence_text}): {reason[:100]}"
             if not _allow_real_trade:
                 add_realtime_log("info", f"📝 [非交易时段] 记录开仓计划：{sym} {name} {qty}股，真实下单将在开盘后执行")
-                log_decision(db, "skip", sym, name, price, score=confidence, reason=f"[非交易时段记录] AI计划开仓{qty}股(信心{confidence}%): {reason[:100]}")
+                log_decision(db, "skip", sym, name, price, score=confidence, reason=f"[非交易时段记录] AI计划开仓{qty}股(信心{confidence_text}): {reason[:100]}")
                 continue
             result = exec_buy(db, sym, name, price, qty, stop_loss=sl, reason=reason_str, score=confidence, is_etf=is_etf)
             if result["ok"]:
@@ -3164,7 +3234,7 @@ class AutonomousTradingEngine:
                 bought_this_round = True
                 add_realtime_log("success", f"✅ 买入成功: {sym} {name} {qty}股 @ ¥{price:.2f}")
                 add_realtime_log("info", f"💡 AI理由: {reason[:80]}")
-                print(f"[AI] 买入 {sym} {name} {qty}股 @ {price} 止损{sl} AI信心{confidence}%")
+                print(f"[AI] 买入 {sym} {name} {qty}股 @ {price} 止损{sl} AI信心{confidence_text}")
 
         if not bought_this_round:
             skipped_by_executor = max(0, len(buy_picks) - selected_count)

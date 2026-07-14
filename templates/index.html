@@ -22,48 +22,142 @@
   }
 </script>
 <style>
-:root { color-scheme: light; }
+:root {
+  color-scheme: dark;
+  --bg-0: #0a0e1a;
+  --bg-1: #0f1629;
+  --bg-2: #161d35;
+  --bg-3: #1c2541;
+  --border: #243056;
+  --border-light: #324170;
+  --text-1: #f0f4f8;
+  --text-2: #a0aec0;
+  --text-3: #718096;
+  --cyan: #22d3ee;
+  --cyan-glow: rgba(34,211,238,0.4);
+  --cyan-bg: rgba(34,211,238,0.12);
+  --cyan-border: rgba(34,211,238,0.3);
+  --amber: #fbbf24;
+  --amber-bg: rgba(251,191,36,0.12);
+  --purple: #a78bfa;
+  --purple-glow: rgba(167,139,250,0.3);
+  --green: #34d399;
+  --green-glow: rgba(52,211,153,0.3);
+  --green-bg: rgba(52,211,153,0.12);
+  --red: #f87171;
+  --red-glow: rgba(248,113,113,0.3);
+  --red-bg: rgba(248,113,113,0.12);
+  --font-data: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Menlo', monospace;
+  --r-lg: 16px;
+  --r-md: 12px;
+  --r-sm: 8px;
+  --shadow-card: 0 4px 24px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-glow-cyan: 0 0 20px var(--cyan-glow);
+  --shadow-glow-green: 0 0 20px var(--green-glow);
+  --shadow-glow-red: 0 0 20px var(--red-glow);
+  --shadow-glow-purple: 0 0 20px var(--purple-glow);
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --bg-glow-1: rgba(34,211,238,0.08);
+  --bg-glow-2: rgba(167,139,250,0.06);
+  --bg-glow-3: rgba(52,211,153,0.05);
+}
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  background: #0f0f1a; color: #e2e8f0; min-height: 100vh;
+  background: var(--bg-0);
+  background-image:
+    radial-gradient(at 20% 30%, var(--bg-glow-1) 0, transparent 50%),
+    radial-gradient(at 80% 70%, var(--bg-glow-2) 0, transparent 50%),
+    radial-gradient(at 50% 100%, var(--bg-glow-3) 0, transparent 50%);
+  color: var(--text-1);
+  min-height: 100vh;
 }
 .app-header {
-  background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3e 100%);
-  border-bottom: 1px solid #2a2a4a;
-  padding: 0 24px; height: 64px; display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(135deg, #050810 0%, #0a1225 50%, #0d1830 100%);
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(90deg, transparent 0%, var(--cyan-border) 30%, var(--purple) 50%, var(--cyan-border) 70%, transparent 100%) 1;
+  padding: 0 32px; height: 72px; display: flex; align-items: center; justify-content: space-between;
+  position: relative;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.5), 0 1px 0 rgba(34,211,238,0.1);
 }
-.app-header h1 { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.app-header h1 .acc { color: #60a5fa; }
-.header-right { display: flex; align-items: center; gap: 20px; font-size: 13px; }
-.engine-badge { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
-.engine-badge.running { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
-.engine-badge.stopped { background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+.app-header::before {
+  content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(90deg, transparent, transparent 60px, rgba(34,211,238,0.02) 60px, rgba(34,211,238,0.02) 61px);
+  pointer-events: none;
+}
+.app-header::after {
+  content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), var(--purple), var(--cyan), transparent);
+  opacity: 0.6;
+  filter: blur(1px);
+  pointer-events: none;
+}
+.app-header h1 { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 10px; letter-spacing: 0.3px; }
+.app-header h1 .acc { color: var(--cyan); font-size: 22px; }
+.header-right { display: flex; align-items: center; gap: 20px; font-size: 13px; color: var(--text-2); position: relative; z-index: 1; }
+.engine-badge { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(8px); }
+.engine-badge.running { background: var(--green-bg); color: var(--green); border: 1px solid rgba(52,211,153,0.25); }
+.engine-badge.stopped { background: var(--red-bg); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.dot.green { background: #4ade80; animation: pulse 1.5s infinite; }
-.dot.red { background: #ef4444; }
+.dot.green { background: var(--green); animation: pulse 1.5s infinite; box-shadow: 0 0 8px var(--green); }
+.dot.red { background: var(--red); }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+.container { max-width: 1400px; margin: 0 auto; padding: 20px 24px; }
 
 /* Stats */
-.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 24px; }
 .stat-card {
-  background: #1a1a30; border-radius: 12px; padding: 16px 20px;
-  border: 1px solid #2a2a4a;
+  background: linear-gradient(145deg, var(--bg-2) 0%, var(--bg-3) 100%);
+  border-radius: var(--r-lg); padding: 18px 22px;
+  border: 1px solid var(--border);
+  position: relative; overflow: hidden;
+  transition: all var(--transition-smooth);
+  box-shadow: var(--shadow-card);
 }
-.stat-label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; font-weight: 700; }
-.stat-value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.stat-value.up { color: #4ade80; }
-.stat-value.down { color: #ef4444; }
-.stat-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
+.stat-card:hover {
+  border-color: var(--cyan-border);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-card), var(--shadow-glow-cyan);
+}
+.stat-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--cyan) 0%, var(--purple) 50%, var(--cyan) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.stat-label { font-size: 12px; color: var(--text-2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; font-weight: 600; }
+.stat-value { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; font-family: var(--font-data); letter-spacing: -0.5px; }
+.stat-value.up { color: var(--green); text-shadow: 0 0 12px var(--green-glow); }
+.stat-value.down { color: var(--red); text-shadow: 0 0 12px var(--red-glow); }
+.stat-sub { font-size: 12px; color: var(--text-3); margin-top: 4px; font-family: var(--font-data); }
 
 /* Cards */
 .card {
-  background: #1a1a30; border-radius: 12px; padding: 20px; margin-bottom: 16px;
-  border: 1px solid #2a2a4a;
+  background: linear-gradient(145deg, var(--bg-2) 0%, rgba(28, 37, 66, 0.6) 100%);
+  border-radius: var(--r-lg); padding: 22px; margin-bottom: 16px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  transition: all var(--transition-smooth);
+  backdrop-filter: blur(8px);
 }
-.card-title { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; }
+.card:hover {
+  border-color: var(--border-light);
+  box-shadow: var(--shadow-card), 0 8px 32px rgba(0,0,0,0.3);
+}
+.card-title {
+  font-size: 14px; font-weight: 600; margin-bottom: 18px;
+  color: var(--text-1); text-transform: uppercase; letter-spacing: 1.2px;
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
 
 /* Charts */
 .chart-container { position: relative; height: 280px; width: 100%; }
@@ -77,318 +171,904 @@ body {
 
 /* Tables */
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-thead { background: rgba(255,255,255,0.03); }
-th { padding: 10px 12px; text-align: left; font-weight: 500; color: #64748b; border-bottom: 1px solid #2a2a4a; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-tr:hover td { background: rgba(255,255,255,0.03); }
-.text-up { color: #4ade80; }
-.text-down { color: #ef4444; }
+thead { background: rgba(34,211,238,0.03); }
+th { padding: 10px 12px; text-align: left; font-weight: 500; color: var(--text-3); border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; }
+td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.03); font-variant-numeric: tabular-nums; }
+tr:hover td { background: rgba(34,211,238,0.02); }
+.text-up { color: var(--green); font-family: var(--font-data); font-weight: 500; }
+.text-down { color: var(--red); font-family: var(--font-data); font-weight: 500; }
 .text-right { text-align: right; }
-.text-muted { color: #64748b; }
+.text-muted { color: var(--text-3); }
 
 /* Tags */
-.tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
-.tag-buy { background: rgba(34,197,94,0.15); color: #4ade80; }
-.tag-sell { background: rgba(239,68,68,0.15); color: #ef4444; }
-.tag-scan { background: rgba(96,165,250,0.15); color: #60a5fa; }
-.tag-hold { background: rgba(148,163,184,0.15); color: #94a3b8; }
+.tag { display: inline-block; padding: 3px 8px; border-radius: var(--r-sm); font-size: 11px; font-weight: 500; letter-spacing: 0.3px; }
+.tag-buy { background: var(--green-bg); color: var(--green); }
+.tag-sell { background: var(--red-bg); color: var(--red); }
+.tag-scan { background: var(--cyan-bg); color: var(--cyan); }
+.tag-hold { background: rgba(148,163,184,0.1); color: var(--text-2); }
 
 /* Loading */
-.loading { text-align: center; padding: 40px; color: #64748b; }
-.spinner { width: 32px; height: 32px; border: 3px solid #2a2a4a; border-top-color: #60a5fa; border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+.loading { text-align: center; padding: 40px; color: var(--text-3); }
+.spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--cyan); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Empty */
-.empty-state { text-align: center; padding: 40px; color: #475569; }
+.empty-state { text-align: center; padding: 40px; color: var(--text-3); font-size: 13px; }
 
 /* Trade History Table */
 #tradeHistoryTable { font-size: 13px; }
-#tradeHistoryTable thead { background: rgba(96,165,250,0.08); }
-#tradeHistoryTable th { padding: 10px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; border-bottom: 1px solid #2a2a4a; white-space: nowrap; }
-#tradeHistoryTable td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
-#tradeHistoryTable tr:hover td { background: rgba(96,165,250,0.04); }
-#tradeHistoryTable .tag-buy { background: rgba(34,197,94,0.15); color: #4ade80; padding: 3px 10px; border-radius: 6px; font-weight: 600; }
-#tradeHistoryTable .tag-sell { background: rgba(239,68,68,0.15); color: #ef4444; padding: 3px 10px; border-radius: 6px; font-weight: 600; }
+#tradeHistoryTable thead { background: var(--cyan-bg); }
+#tradeHistoryTable th { padding: 11px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-3); border-bottom: 1px solid var(--border); white-space: nowrap; }
+#tradeHistoryTable td { padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.03); font-variant-numeric: tabular-nums; }
+#tradeHistoryTable tr:hover td { background: rgba(34,211,238,0.03); }
+#tradeHistoryTable .tag-buy { background: var(--green-bg); color: var(--green); padding: 3px 10px; border-radius: var(--r-sm); font-weight: 600; letter-spacing: 0.3px; }
+#tradeHistoryTable .tag-sell { background: var(--red-bg); color: var(--red); padding: 3px 10px; border-radius: var(--r-sm); font-weight: 600; letter-spacing: 0.3px; }
 
 /* Bar */
-.action-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
-.btn { padding: 8px 20px; border: none; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-.btn-primary { background: #3b82f6; color: #fff; }
-.btn-primary:hover { background: #2563eb; }
-.btn-danger { background: #ef4444; color: #fff; }
-.btn-danger:hover { background: #dc2626; }
-.btn-outline { background: transparent; border: 1px solid #3b3b5e; color: #94a3b8; }
-.btn-outline:hover { background: rgba(255,255,255,0.05); }
+.action-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.btn { padding: 8px 20px; border: none; border-radius: var(--r-md); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; letter-spacing: 0.2px; }
+.btn-primary { background: linear-gradient(135deg, #0891b2, #0e7490); color: #fff; box-shadow: 0 2px 8px rgba(8,145,178,0.25); }
+.btn-primary:hover { background: linear-gradient(135deg, #06b6d4, #0891b2); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(8,145,178,0.35); }
+.btn-danger { background: linear-gradient(135deg, #dc2626, #b91c1c); color: #fff; }
+.btn-danger:hover { background: linear-gradient(135deg, #ef4444, #dc2626); transform: translateY(-1px); }
+.btn-outline { background: transparent; border: 1px solid var(--border-light); color: var(--text-2); }
+.btn-outline:hover { background: var(--cyan-bg); color: var(--cyan); border-color: var(--cyan-border); }
 .btn-sm { padding: 6px 14px; font-size: 12px; }
 
 /* Scroll */
 .scroll { max-height: 400px; overflow-y: auto; }
-.scroll::-webkit-scrollbar { width: 6px; }
-.scroll::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 3px; }
+.scroll::-webkit-scrollbar { width: 5px; }
+.scroll::-webkit-scrollbar-track { background: var(--bg-1); }
+.scroll::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: var(--r-sm); }
+.scroll::-webkit-scrollbar-thumb:hover { background: var(--cyan-border); }
 
 /* Config form */
 .config-group { display: flex; gap: 12px; flex-wrap: wrap; }
 .config-item { min-width: 140px; }
-.config-item label { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-.config-item input { width: 100%; padding: 6px 10px; background: #0f0f1a; border: 1px solid #2a2a4a; border-radius: 6px; color: #e2e8f0; font-size: 13px; }
+.config-item label { display: block; font-size: 11px; color: var(--text-3); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.8px; }
+.config-item input { width: 100%; padding: 6px 10px; background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text-1); font-size: 13px; font-family: var(--font-data); }
+.config-item input:focus { outline: none; border-color: var(--cyan-border); box-shadow: 0 0 0 2px var(--cyan-bg); }
 
 /* Picks */
 .pick-card {
-  background: rgba(255,255,255,0.03); border-radius: 8px; padding: 12px 16px;
-  border: 1px solid #2a2a4a; margin-bottom: 8px;
+  background: var(--bg-3); border-radius: var(--r-md); padding: 14px 18px;
+  border: 1px solid var(--border); margin-bottom: 10px;
+  transition: border-color 0.2s;
 }
+.pick-card:hover { border-color: var(--border-light); }
 .pick-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-.pick-symbol { font-weight: 600; font-size: 15px; }
-.pick-name { color: #94a3b8; font-size: 12px; }
-.pick-score { font-size: 20px; font-weight: 700; color: #60a5fa; }
-.pick-reasons { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
-.pick-reason { font-size: 11px; background: rgba(96,165,250,0.1); color: #93c5fd; padding: 2px 8px; border-radius: 4px; }
+.pick-symbol { font-weight: 700; font-size: 15px; font-family: var(--font-data); }
+.pick-name { color: var(--text-2); font-size: 12px; }
+.pick-score { font-size: 22px; font-weight: 700; color: var(--cyan); font-family: var(--font-data); }
+.pick-reasons { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+.pick-reason { font-size: 11px; background: var(--cyan-bg); color: var(--cyan); padding: 3px 8px; border-radius: var(--r-sm); letter-spacing: 0.2px; }
 
 /* Budget selector buttons */
 .budget-btn {
-  background: rgba(255,255,255,0.05);
-  color: #94a3b8;
-  border: 1px solid rgba(255,255,255,0.1);
-  padding: 4px 10px;
-  border-radius: 6px;
+  background: var(--bg-3);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: var(--r-sm);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
 }
-.budget-btn:hover { background: rgba(96,165,250,0.15); color: #60a5fa; border-color: rgba(96,165,250,0.3); }
-.budget-btn.active { background: rgba(96,165,250,0.2); color: #60a5fa; border-color: #60a5fa; font-weight: 600; }
+.budget-btn:hover { background: var(--cyan-bg); color: var(--cyan); border-color: var(--cyan-border); }
+.budget-btn.active { background: var(--cyan-bg); color: var(--cyan); border-color: var(--cyan-border); font-weight: 600; }
 
 /* Doc tab styles */
-.doc-section { background: #141428; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; border: 1px solid #2a2a4a; }
-.doc-section h3 { color: #60a5fa; font-size: 16px; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px; }
-.doc-section h4 { color: #e2e8f0; font-size: 14px; margin: 14px 0 8px 0; }
-.doc-section p, .doc-section li { color: #94a3b8; font-size: 13px; line-height: 1.8; }
+.doc-section { background: var(--bg-2); border-radius: var(--r-lg); padding: 22px 26px; margin-bottom: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-card); }
+.doc-section h3 { color: var(--cyan); font-size: 15px; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.doc-section h4 { color: var(--text-1); font-size: 14px; margin: 16px 0 8px 0; font-weight: 600; }
+.doc-section p, .doc-section li { color: var(--text-2); font-size: 13px; line-height: 1.8; }
 .doc-section ul { padding-left: 20px; margin: 4px 0; }
-.doc-section code { background: #1e1e3a; color: #facc15; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+.doc-section code { background: var(--amber-bg); color: var(--amber); padding: 2px 7px; border-radius: var(--r-sm); font-size: 12px; font-family: var(--font-data); }
 .doc-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
-.doc-table th { background: #1e1e3a; color: #60a5fa; padding: 8px 10px; text-align: left; border: 1px solid #2a2a4a; }
-.doc-table td { padding: 6px 10px; border: 1px solid #2a2a4a; color: #cbd5e1; }
+.doc-table th { background: var(--bg-3); color: var(--cyan); padding: 8px 12px; text-align: left; border: 1px solid var(--border); font-weight: 600; letter-spacing: 0.3px; }
+.doc-table td { padding: 7px 12px; border: 1px solid var(--border); color: var(--text-2); }
 .doc-flow { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-.doc-flow-step { background: #1e1e3a; border: 1px solid #2a2a4a; border-radius: 8px; padding: 10px 14px; flex: 1; min-width: 160px; }
-.doc-flow-step .step-num { color: #60a5fa; font-weight: 700; font-size: 11px; }
-.doc-flow-step .step-title { color: #e2e8f0; font-size: 13px; font-weight: 600; margin: 2px 0; }
-.doc-flow-step .step-desc { color: #64748b; font-size: 11px; }
-.doc-tag { display: inline-block; background: #1e3a5f; color: #60a5fa; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin: 2px; }
+.doc-flow-step { background: var(--bg-3); border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px 16px; flex: 1; min-width: 160px; transition: border-color 0.2s; }
+.doc-flow-step:hover { border-color: var(--cyan-border); }
+.doc-flow-step .step-num { color: var(--cyan); font-weight: 700; font-size: 11px; letter-spacing: 0.5px; }
+.doc-flow-step .step-title { color: var(--text-1); font-size: 13px; font-weight: 600; margin: 2px 0; }
+.doc-flow-step .step-desc { color: var(--text-3); font-size: 11px; }
+.doc-tag { display: inline-block; background: var(--cyan-bg); color: var(--cyan); padding: 3px 8px; border-radius: var(--r-sm); font-size: 11px; margin: 2px; }
 
 /* Tabs */
-.tab-bar { display: flex; gap: 8px; border-bottom: 1px solid #2a2a4a; margin-bottom: 16px; }
-.tab-btn { background: transparent; border: none; color: #94a3b8; padding: 10px 18px; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; margin-bottom: -1px; }
-.tab-btn:hover { color: #e2e8f0; }
-.tab-btn.active { color: #60a5fa; border-bottom-color: #60a5fa; font-weight: 600; }
+.tab-bar { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; padding-bottom: 0; }
+.tab-btn { background: transparent; border: none; color: var(--text-3); padding: 10px 16px; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; margin-bottom: -1px; border-radius: var(--r-sm) var(--r-sm) 0 0; letter-spacing: 0.2px; }
+.tab-btn:hover { color: var(--text-1); background: rgba(255,255,255,0.02); }
+.tab-btn.active { color: var(--cyan); border-bottom-color: var(--cyan); font-weight: 600; background: var(--cyan-bg); }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
 /* 实时日志 */
 #realtimeLogs {
   scrollbar-width: thin;
-  scrollbar-color: #2a2a4a transparent;
+  scrollbar-color: var(--border-light) transparent;
 }
 #realtimeLogs::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 #realtimeLogs::-webkit-scrollbar-track {
   background: transparent;
 }
 #realtimeLogs::-webkit-scrollbar-thumb {
-  background: #2a2a4a;
-  border-radius: 3px;
+  background: var(--border-light);
+  border-radius: var(--r-sm);
 }
 #realtimeLogs::-webkit-scrollbar-thumb:hover {
-  background: #3a3a5a;
+  background: var(--cyan-border);
 }
 
 /* Agent Timeline */
 .timeline-item {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid #2a2a4a;
-  border-radius: 8px;
-  padding: 14px 18px;
-  margin-bottom: 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 16px 20px;
+  margin-bottom: 12px;
   position: relative;
+  transition: border-color 0.2s;
 }
+.timeline-item:hover { border-color: var(--border-light); }
 .timeline-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   flex-wrap: wrap;
   gap: 6px;
 }
-.timeline-time { font-size: 12px; color: #64748b; }
+.timeline-time { font-size: 12px; color: var(--text-3); font-family: var(--font-data); }
 .timeline-status {
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 3px 10px;
+  border-radius: var(--r-sm);
   font-size: 11px;
   font-weight: 500;
+  letter-spacing: 0.3px;
 }
-.timeline-status.ok { background: rgba(34,197,94,0.15); color: #4ade80; }
-.timeline-status.error { background: rgba(239,68,68,0.15); color: #ef4444; }
-.timeline-summary { font-size: 13px; color: #cbd5e1; margin-bottom: 8px; }
+.timeline-status.ok { background: var(--green-bg); color: var(--green); }
+.timeline-status.error { background: var(--red-bg); color: var(--red); }
+.timeline-summary { font-size: 13px; color: var(--text-1); margin-bottom: 10px; line-height: 1.6; }
 .timeline-nodes {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .timeline-node {
-  background: #1e1e3a;
-  border: 1px solid #2a2a4a;
-  border-radius: 6px;
-  padding: 4px 10px;
+  background: var(--cyan-bg);
+  border: 1px solid var(--cyan-border);
+  border-radius: var(--r-sm);
+  padding: 4px 12px;
   font-size: 11px;
-  color: #93c5fd;
+  color: var(--cyan);
 }
 .timeline-node .node-name { font-weight: 600; }
 .timeline-reasoning {
   font-size: 12px;
-  color: #94a3b8;
-  border-left: 2px solid #3b82f6;
-  padding-left: 10px;
-  margin-top: 6px;
+  color: var(--text-2);
+  border-left: 3px solid var(--cyan);
+  padding-left: 12px;
+  margin-top: 8px;
+  line-height: 1.7;
 }
-.timeline-reasoning li { margin: 2px 0; }
+.timeline-reasoning li { margin: 3px 0; }
 
 /* Memory Cards */
 .memory-card {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid #2a2a4a;
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 14px 18px;
+  margin-bottom: 10px;
+  transition: border-color 0.2s;
 }
+.memory-card:hover { border-color: var(--border-light); }
 .memory-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .memory-type {
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 3px 10px;
+  border-radius: var(--r-sm);
   font-size: 11px;
   font-weight: 500;
-  background: rgba(139,92,246,0.15);
-  color: #c084fc;
+  background: rgba(167,139,250,0.12);
+  color: var(--purple);
+  letter-spacing: 0.3px;
 }
-.memory-date { font-size: 12px; color: #64748b; }
-.memory-content { font-size: 13px; color: #cbd5e1; }
+.memory-date { font-size: 12px; color: var(--text-3); font-family: var(--font-data); }
+.memory-content { font-size: 13px; color: var(--text-1); line-height: 1.6; }
 .memory-tags {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 .memory-tag {
   font-size: 10px;
-  background: rgba(96,165,250,0.1);
-  color: #93c5fd;
-  padding: 2px 6px;
-  border-radius: 3px;
+  background: var(--cyan-bg);
+  color: var(--cyan);
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
 }
 
 /* Commander Card */
 .commander-card {
-  background: linear-gradient(135deg, #1a1a30 0%, #1a2a4a 100%);
-  border: 1px solid #3a4a6a;
-  border-radius: 14px;
-  padding: 20px 24px;
+  background: linear-gradient(135deg, var(--bg-2) 0%, var(--bg-3) 100%);
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-lg);
+  padding: 22px 26px;
   transition: all 0.3s;
+  box-shadow: var(--shadow-card);
 }
 .commander-card.thinking {
-  border-color: #60a5fa;
+  border-color: var(--cyan-border);
   animation: commanderGlow 2s ease-in-out infinite;
 }
-.commander-card.done { border-color: rgba(34,197,94,0.4); }
+.commander-card.done { border-color: rgba(52,211,153,0.35); }
 @keyframes commanderGlow {
-  0%,100% { box-shadow: 0 0 8px rgba(96,165,250,0.1); }
-  50% { box-shadow: 0 0 24px rgba(96,165,250,0.3); }
+  0%,100% { box-shadow: 0 0 10px rgba(34,211,238,0.08); }
+  50% { box-shadow: 0 0 28px rgba(34,211,238,0.25), 0 0 60px rgba(34,211,238,0.08); }
 }
-.commander-left { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+.commander-left { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
 .commander-avatar {
   width: 56px; height: 56px;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  background: linear-gradient(135deg, #0891b2, #6366f1);
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 28px;
-  box-shadow: 0 0 20px rgba(99,102,241,0.3);
+  box-shadow: 0 0 24px rgba(34,211,238,0.25), inset 0 2px 4px rgba(255,255,255,0.1);
 }
-.commander-name { font-size: 18px; font-weight: 700; }
+.commander-name { font-size: 17px; font-weight: 700; letter-spacing: 0.3px; }
 .commander-status {
-  font-size: 12px; color: #64748b; margin-top: 2px;
+  font-size: 12px; color: var(--text-3); margin-top: 2px;
 }
-.commander-status.thinking { color: #60a5fa; }
-.commander-status.done { color: #4ade80; }
+.commander-status.thinking { color: var(--cyan); }
+.commander-status.done { color: var(--green); }
 .commander-body { min-height: 36px; }
 .commander-decision {
-  font-size: 16px; font-weight: 600; color: #4ade80;
-  background: rgba(34,197,94,0.08);
-  padding: 10px 16px; border-radius: 8px;
-  border-left: 3px solid #4ade80;
+  font-size: 15px; font-weight: 600; color: var(--green);
+  background: var(--green-bg);
+  padding: 12px 18px; border-radius: var(--r-md);
+  border-left: 3px solid var(--green);
 }
 .commander-thinking {
-  font-size: 13px; color: #93c5fd;
-  padding: 8px 0;
+  font-size: 13px; color: var(--cyan);
+  padding: 8px 0; line-height: 1.6;
 }
 
 /* Agent Character Cards */
 .agent-char {
-  background: rgba(255,255,255,0.02);
-  border: 1px solid #2a2a4a;
-  border-radius: 12px;
-  padding: 16px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 18px;
   transition: all 0.3s;
   position: relative;
   overflow: hidden;
 }
-.agent-char.idle { opacity: 0.45; }
+.agent-char.idle { opacity: 0.4; }
 .agent-char.thinking {
-  border-color: #60a5fa;
-  background: rgba(96,165,250,0.04);
+  border-color: var(--cyan-border);
+  background: var(--cyan-bg);
   animation: agentPulse 1.5s ease-in-out infinite;
 }
 .agent-char.done {
-  border-color: rgba(34,197,94,0.25);
-  background: rgba(34,197,94,0.02);
+  border-color: rgba(52,211,153,0.25);
+  background: var(--green-bg);
 }
 @keyframes agentPulse {
-  0%,100% { box-shadow: 0 0 4px rgba(96,165,250,0.08); }
-  50% { box-shadow: 0 0 14px rgba(96,165,250,0.25); }
+  0%,100% { box-shadow: 0 0 6px rgba(34,211,238,0.06); }
+  50% { box-shadow: 0 0 18px rgba(34,211,238,0.2); }
 }
 .agent-char-header {
-  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
 }
 .agent-char-avatar {
-  width: 42px; height: 42px;
+  width: 44px; height: 44px;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 22px;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 .agent-char-meta { flex: 1; min-width: 0; }
-.agent-char-name { font-size: 14px; font-weight: 600; }
-.agent-char-role { font-size: 11px; color: #64748b; }
+.agent-char-name { font-size: 14px; font-weight: 600; letter-spacing: 0.2px; }
+.agent-char-role { font-size: 11px; color: var(--text-3); }
 .agent-char-badge {
-  padding: 2px 10px; border-radius: 10px;
+  padding: 3px 12px; border-radius: var(--r-sm);
   font-size: 10px; font-weight: 600;
-  white-space: nowrap;
+  white-space: nowrap; letter-spacing: 0.3px;
 }
-.agent-char-badge.idle { background: rgba(100,116,139,0.15); color: #64748b; }
-.agent-char-badge.thinking { background: rgba(96,165,250,0.15); color: #60a5fa; }
-.agent-char-badge.done { background: rgba(34,197,94,0.15); color: #4ade80; }
+.agent-char-badge.idle { background: rgba(100,116,139,0.12); color: var(--text-3); }
+.agent-char-badge.thinking { background: var(--cyan-bg); color: var(--cyan); }
+.agent-char-badge.done { background: var(--green-bg); color: var(--green); }
 .agent-char-thinking {
-  font-size: 12px; color: #93c5fd;
-  min-height: 18px; line-height: 1.6;
+  font-size: 12px; color: var(--cyan);
+  min-height: 18px; line-height: 1.7;
 }
 .agent-char-result {
-  font-size: 12px; color: #4ade80;
-  margin-top: 8px; padding-top: 8px;
-  border-top: 1px solid rgba(255,255,255,0.05);
-  min-height: 18px; line-height: 1.6;
+  font-size: 12px; color: var(--green);
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--border);
+  min-height: 18px; line-height: 1.7;
+}
+
+/* ── Theme Switcher ── */
+.theme-switcher { position: relative; z-index: 100; }
+.theme-btn {
+  background: var(--bg-3); border: 1px solid var(--border); color: var(--text-2);
+  width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+  transition: all var(--transition-fast);
+}
+.theme-btn:hover { border-color: var(--cyan-border); background: var(--cyan-bg); transform: scale(1.1); }
+.theme-menu {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  background: var(--bg-2); border: 1px solid var(--border-light);
+  border-radius: var(--r-md); padding: 8px; min-width: 220px;
+  max-height: 500px; overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  display: none; backdrop-filter: blur(16px);
+}
+.theme-menu::-webkit-scrollbar { width: 4px; }
+.theme-menu::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+.theme-menu.open { display: block; animation: themeMenuIn 0.2s ease-out; }
+@keyframes themeMenuIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+.theme-group-header {
+  font-size: 10px; font-weight: 600; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--text-3);
+  padding: 6px 14px 4px; margin-top: 4px;
+}
+.theme-group-header:first-child { margin-top: 0; }
+.theme-divider { height: 1px; background: var(--border); margin: 6px 8px; }
+.theme-option {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; border-radius: var(--r-sm);
+  cursor: pointer; transition: background var(--transition-fast);
+  font-size: 13px; color: var(--text-2); white-space: nowrap;
+  border: none; background: none; width: 100%; text-align: left;
+}
+.theme-option:hover { background: var(--bg-3); color: var(--text-1); }
+.theme-option.active { color: var(--cyan); background: var(--cyan-bg); }
+.theme-option.active .theme-dot { box-shadow: 0 0 8px currentColor; }
+.theme-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 2px solid var(--border-light); }
+.theme-label { font-weight: 500; }
+
+/* ── Theme: 午夜青蓝 (Default) ── already set via :root */
+
+/* ── Theme: Matrix 矩阵绿 ── */
+[data-theme="matrix"] {
+  --bg-0: #000800;
+  --bg-1: #001200;
+  --bg-2: #002000;
+  --bg-3: #003000;
+  --border: #004d00;
+  --border-light: #006600;
+  --text-1: #c0ffc0;
+  --text-2: #70cc70;
+  --text-3: #408040;
+  --cyan: #00ff41;
+  --cyan-glow: rgba(0,255,65,0.5);
+  --cyan-bg: rgba(0,255,65,0.08);
+  --cyan-border: rgba(0,255,65,0.3);
+  --amber: #00ff41;
+  --amber-bg: rgba(0,255,65,0.08);
+  --purple: #00ff41;
+  --purple-glow: rgba(0,255,65,0.3);
+  --green: #00ff41;
+  --green-glow: rgba(0,255,65,0.5);
+  --green-bg: rgba(0,255,65,0.1);
+  --red: #ff0040;
+  --red-glow: rgba(255,0,64,0.5);
+  --red-bg: rgba(255,0,64,0.12);
+  --bg-glow-1: rgba(0,255,65,0.06);
+  --bg-glow-2: rgba(0,255,65,0.04);
+  --bg-glow-3: rgba(0,255,65,0.03);
+}
+[data-theme="matrix"] body { background-image: radial-gradient(at 50% 50%, rgba(0,255,65,0.05) 0, transparent 60%); }
+
+/* ── Theme: Sunset 落日橙 ── */
+[data-theme="sunset"] {
+  --bg-0: #1a0a04;
+  --bg-1: #241008;
+  --bg-2: #301810;
+  --bg-3: #3d2018;
+  --border: #553025;
+  --border-light: #7a4838;
+  --text-1: #fff0e0;
+  --text-2: #d4a080;
+  --text-3: #8a6050;
+  --cyan: #ff6b35;
+  --cyan-glow: rgba(255,107,53,0.4);
+  --cyan-bg: rgba(255,107,53,0.12);
+  --cyan-border: rgba(255,107,53,0.3);
+  --amber: #ffc857;
+  --amber-bg: rgba(255,200,87,0.12);
+  --purple: #ff8a65;
+  --purple-glow: rgba(255,138,101,0.3);
+  --green: #66bb6a;
+  --green-glow: rgba(102,187,106,0.3);
+  --green-bg: rgba(102,187,106,0.12);
+  --red: #ff5252;
+  --red-glow: rgba(255,82,82,0.4);
+  --red-bg: rgba(255,82,82,0.12);
+  --bg-glow-1: rgba(255,107,53,0.07);
+  --bg-glow-2: rgba(255,200,87,0.05);
+  --bg-glow-3: rgba(255,82,82,0.04);
+}
+
+/* ── Theme: Nebula 星云紫 ── */
+[data-theme="nebula"] {
+  --bg-0: #0c0618;
+  --bg-1: #140a28;
+  --bg-2: #1c1038;
+  --bg-3: #241848;
+  --border: #302060;
+  --border-light: #453080;
+  --text-1: #f0e8ff;
+  --text-2: #b0a0d0;
+  --text-3: #706098;
+  --cyan: #b388ff;
+  --cyan-glow: rgba(179,136,255,0.4);
+  --cyan-bg: rgba(179,136,255,0.12);
+  --cyan-border: rgba(179,136,255,0.3);
+  --amber: #ff80ab;
+  --amber-bg: rgba(255,128,171,0.12);
+  --purple: #ea80fc;
+  --purple-glow: rgba(234,128,252,0.4);
+  --green: #69f0ae;
+  --green-glow: rgba(105,240,174,0.3);
+  --green-bg: rgba(105,240,174,0.1);
+  --red: #ff5252;
+  --red-glow: rgba(255,82,82,0.4);
+  --red-bg: rgba(255,82,82,0.12);
+  --bg-glow-1: rgba(179,136,255,0.08);
+  --bg-glow-2: rgba(234,128,252,0.06);
+  --bg-glow-3: rgba(255,128,171,0.05);
+}
+
+/* ── Theme: Deep Ocean 深海蓝 ── */
+[data-theme="deep-ocean"] {
+  --bg-0: #001428;
+  --bg-1: #001f3f;
+  --bg-2: #002952;
+  --bg-3: #003366;
+  --border: #004080;
+  --border-light: #0059b3;
+  --text-1: #e0f2ff;
+  --text-2: #80bfff;
+  --text-3: #4080bf;
+  --cyan: #40c4ff;
+  --cyan-glow: rgba(64,196,255,0.4);
+  --cyan-bg: rgba(64,196,255,0.12);
+  --cyan-border: rgba(64,196,255,0.3);
+  --amber: #64b5f6;
+  --amber-bg: rgba(100,181,246,0.12);
+  --purple: #29b6f6;
+  --purple-glow: rgba(41,182,246,0.3);
+  --green: #4dd0e1;
+  --green-glow: rgba(77,208,225,0.3);
+  --green-bg: rgba(77,208,225,0.1);
+  --red: #ef5350;
+  --red-glow: rgba(239,83,80,0.4);
+  --red-bg: rgba(239,83,80,0.12);
+  --bg-glow-1: rgba(64,196,255,0.06);
+  --bg-glow-2: rgba(41,182,246,0.05);
+  --bg-glow-3: rgba(77,208,225,0.04);
+}
+
+/* ── Theme: Blood 血红 ── */
+[data-theme="blood"] {
+  --bg-0: #1a0000;
+  --bg-1: #2a0000;
+  --bg-2: #3a0000;
+  --bg-3: #4a0000;
+  --border: #660000;
+  --border-light: #800000;
+  --text-1: #ffe0e0;
+  --text-2: #ff9999;
+  --text-3: #cc6666;
+  --cyan: #ff4444;
+  --cyan-glow: rgba(255,68,68,0.4);
+  --cyan-bg: rgba(255,68,68,0.12);
+  --cyan-border: rgba(255,68,68,0.3);
+  --amber: #ff6b6b;
+  --amber-bg: rgba(255,107,107,0.12);
+  --purple: #ff5252;
+  --purple-glow: rgba(255,82,82,0.3);
+  --green: #ff8a80;
+  --green-glow: rgba(255,138,128,0.3);
+  --green-bg: rgba(255,138,128,0.1);
+  --red: #ff1744;
+  --red-glow: rgba(255,23,68,0.5);
+  --red-bg: rgba(255,23,68,0.15);
+  --bg-glow-1: rgba(255,68,68,0.07);
+  --bg-glow-2: rgba(255,82,82,0.05);
+  --bg-glow-3: rgba(255,23,68,0.04);
+}
+
+/* ── Theme: Golden Age 金色年华 ── */
+[data-theme="golden"] {
+  --bg-0: #0a0a0a;
+  --bg-1: #141414;
+  --bg-2: #1e1e1e;
+  --bg-3: #282828;
+  --border: #3a3a3a;
+  --border-light: #4a4a4a;
+  --text-1: #fff8e1;
+  --text-2: #ffd54f;
+  --text-3: #997a00;
+  --cyan: #ffd700;
+  --cyan-glow: rgba(255,215,0,0.4);
+  --cyan-bg: rgba(255,215,0,0.12);
+  --cyan-border: rgba(255,215,0,0.3);
+  --amber: #ffb300;
+  --amber-bg: rgba(255,179,0,0.12);
+  --purple: #ffa000;
+  --purple-glow: rgba(255,160,0,0.3);
+  --green: #c6ff00;
+  --green-glow: rgba(198,255,0,0.3);
+  --green-bg: rgba(198,255,0,0.1);
+  --red: #ff6e40;
+  --red-glow: rgba(255,110,64,0.4);
+  --red-bg: rgba(255,110,64,0.12);
+  --bg-glow-1: rgba(255,215,0,0.06);
+  --bg-glow-2: rgba(255,160,0,0.05);
+  --bg-glow-3: rgba(255,179,0,0.04);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ══ 浅色主题组 ══
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Theme: Classic White 经典亮白 ── */
+[data-theme="classic-white"] {
+  --bg-0: #f5f5f5;
+  --bg-1: #ffffff;
+  --bg-2: #fafafa;
+  --bg-3: #f0f0f0;
+  --border: #e0e0e0;
+  --border-light: #cccccc;
+  --text-1: #212121;
+  --text-2: #616161;
+  --text-3: #9e9e9e;
+  --cyan: #0277bd;
+  --cyan-glow: rgba(2,119,189,0.3);
+  --cyan-bg: rgba(2,119,189,0.08);
+  --cyan-border: rgba(2,119,189,0.2);
+  --amber: #f57c00;
+  --amber-bg: rgba(245,124,0,0.08);
+  --purple: #7b1fa2;
+  --purple-glow: rgba(123,31,162,0.3);
+  --green: #388e3c;
+  --green-glow: rgba(56,142,60,0.3);
+  --green-bg: rgba(56,142,60,0.08);
+  --red: #d32f2f;
+  --red-glow: rgba(211,47,47,0.3);
+  --red-bg: rgba(211,47,47,0.08);
+  --bg-glow-1: rgba(2,119,189,0.04);
+  --bg-glow-2: rgba(123,31,162,0.03);
+  --bg-glow-3: rgba(56,142,60,0.02);
+  --shadow-card: 0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
+}
+
+/* ── Theme: Warm Cream 米色暖意 ── */
+[data-theme="warm-cream"] {
+  --bg-0: #faf6f0;
+  --bg-1: #ffffff;
+  --bg-2: #fdfbf7;
+  --bg-3: #f5f0e8;
+  --border: #e8dfd0;
+  --border-light: #d4c4a8;
+  --text-1: #3e2723;
+  --text-2: #6d4c41;
+  --text-3: #a1887f;
+  --cyan: #00695c;
+  --cyan-glow: rgba(0,105,92,0.3);
+  --cyan-bg: rgba(0,105,92,0.08);
+  --cyan-border: rgba(0,105,92,0.2);
+  --amber: #e65100;
+  --amber-bg: rgba(230,81,0,0.1);
+  --purple: #6a1b9a;
+  --purple-glow: rgba(106,27,154,0.3);
+  --green: #558b2f;
+  --green-glow: rgba(85,139,47,0.3);
+  --green-bg: rgba(85,139,47,0.08);
+  --red: #c62828;
+  --red-glow: rgba(198,40,40,0.3);
+  --red-bg: rgba(198,40,40,0.08);
+  --bg-glow-1: rgba(0,105,92,0.04);
+  --bg-glow-2: rgba(106,27,154,0.03);
+  --bg-glow-3: rgba(230,81,0,0.03);
+  --shadow-card: 0 2px 10px rgba(62,39,35,0.08), 0 1px 2px rgba(62,39,35,0.05);
+}
+
+/* ── Theme: Mint 薄荷绿 ── */
+[data-theme="mint"] {
+  --bg-0: #f0f9f4;
+  --bg-1: #ffffff;
+  --bg-2: #f7fcfa;
+  --bg-3: #e8f5f0;
+  --border: #c8e6d4;
+  --border-light: #a5d6b8;
+  --text-1: #1b5e20;
+  --text-2: #4caf50;
+  --text-3: #81c784;
+  --cyan: #00897b;
+  --cyan-glow: rgba(0,137,123,0.3);
+  --cyan-bg: rgba(0,137,123,0.1);
+  --cyan-border: rgba(0,137,123,0.25);
+  --amber: #ff8f00;
+  --amber-bg: rgba(255,143,0,0.1);
+  --purple: #7e57c2;
+  --purple-glow: rgba(126,87,194,0.3);
+  --green: #2e7d32;
+  --green-glow: rgba(46,125,50,0.4);
+  --green-bg: rgba(46,125,50,0.1);
+  --red: #e53935;
+  --red-glow: rgba(229,57,53,0.3);
+  --red-bg: rgba(229,57,53,0.08);
+  --bg-glow-1: rgba(0,137,123,0.05);
+  --bg-glow-2: rgba(46,125,50,0.04);
+  --bg-glow-3: rgba(126,87,194,0.03);
+  --shadow-card: 0 2px 10px rgba(27,94,32,0.08), 0 1px 3px rgba(27,94,32,0.05);
+}
+
+/* ── Theme: Sky Blue 天空蓝 ── */
+[data-theme="sky"] {
+  --bg-0: #f0f7ff;
+  --bg-1: #ffffff;
+  --bg-2: #f7fbff;
+  --bg-3: #e3f2fd;
+  --border: #bbdefb;
+  --border-light: #90caf9;
+  --text-1: #0d47a1;
+  --text-2: #1976d2;
+  --text-3: #64b5f6;
+  --cyan: #0288d1;
+  --cyan-glow: rgba(2,136,209,0.3);
+  --cyan-bg: rgba(2,136,209,0.1);
+  --cyan-border: rgba(2,136,209,0.25);
+  --amber: #f57c00;
+  --amber-bg: rgba(245,124,0,0.1);
+  --purple: #5e35b1;
+  --purple-glow: rgba(94,53,177,0.3);
+  --green: #43a047;
+  --green-glow: rgba(67,160,71,0.3);
+  --green-bg: rgba(67,160,71,0.08);
+  --red: #e53935;
+  --red-glow: rgba(229,57,53,0.3);
+  --red-bg: rgba(229,57,53,0.08);
+  --bg-glow-1: rgba(2,136,209,0.05);
+  --bg-glow-2: rgba(94,53,177,0.04);
+  --bg-glow-3: rgba(67,160,71,0.03);
+  --shadow-card: 0 2px 10px rgba(13,71,161,0.08), 0 1px 3px rgba(13,71,161,0.05);
+}
+
+/* ── Theme: Sakura 樱花粉 ── */
+[data-theme="sakura"] {
+  --bg-0: #fff5f7;
+  --bg-1: #ffffff;
+  --bg-2: #fffafb;
+  --bg-3: #ffeef2;
+  --border: #ffcdd2;
+  --border-light: #ef9a9a;
+  --text-1: #880e4f;
+  --text-2: #c2185b;
+  --text-3: #f06292;
+  --cyan: #d81b60;
+  --cyan-glow: rgba(216,27,96,0.3);
+  --cyan-bg: rgba(216,27,96,0.1);
+  --cyan-border: rgba(216,27,96,0.25);
+  --amber: #ff6f00;
+  --amber-bg: rgba(255,111,0,0.1);
+  --purple: #ad1457;
+  --purple-glow: rgba(173,20,87,0.3);
+  --green: #7cb342;
+  --green-glow: rgba(124,179,66,0.3);
+  --green-bg: rgba(124,179,66,0.08);
+  --red: #e91e63;
+  --red-glow: rgba(233,30,99,0.4);
+  --red-bg: rgba(233,30,99,0.1);
+  --bg-glow-1: rgba(216,27,96,0.05);
+  --bg-glow-2: rgba(173,20,87,0.04);
+  --bg-glow-3: rgba(233,30,99,0.03);
+  --shadow-card: 0 2px 10px rgba(136,14,79,0.08), 0 1px 3px rgba(136,14,79,0.05);
+}
+
+/* ── Theme: Lavender 薰衣草紫 ── */
+[data-theme="lavender"] {
+  --bg-0: #f5f0ff;
+  --bg-1: #ffffff;
+  --bg-2: #faf7ff;
+  --bg-3: #ede7f6;
+  --border: #d1c4e9;
+  --border-light: #b39ddb;
+  --text-1: #4a148c;
+  --text-2: #7b1fa2;
+  --text-3: #ab47bc;
+  --cyan: #7b1fa2;
+  --cyan-glow: rgba(123,31,162,0.3);
+  --cyan-bg: rgba(123,31,162,0.1);
+  --cyan-border: rgba(123,31,162,0.25);
+  --amber: #f57c00;
+  --amber-bg: rgba(245,124,0,0.1);
+  --purple: #6a1b9a;
+  --purple-glow: rgba(106,27,154,0.4);
+  --green: #558b2f;
+  --green-glow: rgba(85,139,47,0.3);
+  --green-bg: rgba(85,139,47,0.08);
+  --red: #d81b60;
+  --red-glow: rgba(216,27,96,0.3);
+  --red-bg: rgba(216,27,96,0.08);
+  --bg-glow-1: rgba(123,31,162,0.05);
+  --bg-glow-2: rgba(106,27,154,0.04);
+  --bg-glow-3: rgba(173,20,87,0.03);
+  --shadow-card: 0 2px 10px rgba(74,20,140,0.08), 0 1px 3px rgba(74,20,140,0.05);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ══ 浅色主题通用样式覆写 ══
+   ═══════════════════════════════════════════════════════════ */
+[data-theme="classic-white"],
+[data-theme="warm-cream"],
+[data-theme="mint"],
+[data-theme="sky"],
+[data-theme="sakura"],
+[data-theme="lavender"] {
+  /* 头部：使用浅色渐变 */
+  --header-bg: linear-gradient(135deg, var(--bg-1) 0%, var(--bg-2) 100%);
+}
+
+[data-theme="classic-white"] .app-header,
+[data-theme="warm-cream"] .app-header,
+[data-theme="mint"] .app-header,
+[data-theme="sky"] .app-header,
+[data-theme="sakura"] .app-header,
+[data-theme="lavender"] .app-header {
+  background: var(--bg-1);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04);
+  border-image: none;
+  border-bottom-color: var(--border);
+}
+
+[data-theme="classic-white"] .app-header::before,
+[data-theme="warm-cream"] .app-header::before,
+[data-theme="mint"] .app-header::before,
+[data-theme="sky"] .app-header::before,
+[data-theme="sakura"] .app-header::before,
+[data-theme="lavender"] .app-header::before {
+  background: repeating-linear-gradient(90deg, transparent, transparent 60px, rgba(0,0,0,0.02) 60px, rgba(0,0,0,0.02) 61px);
+}
+
+[data-theme="classic-white"] .app-header::after,
+[data-theme="warm-cream"] .app-header::after,
+[data-theme="mint"] .app-header::after,
+[data-theme="sky"] .app-header::after,
+[data-theme="sakura"] .app-header::after,
+[data-theme="lavender"] .app-header::after {
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  filter: none;
+  opacity: 0.4;
+}
+
+/* 统计卡片顶部色带：亮度调低 */
+[data-theme="classic-white"] .stat-card::before,
+[data-theme="warm-cream"] .stat-card::before,
+[data-theme="mint"] .stat-card::before,
+[data-theme="sky"] .stat-card::before,
+[data-theme="sakura"] .stat-card::before,
+[data-theme="lavender"] .stat-card::before {
+  opacity: 0.7;
+  background: linear-gradient(90deg, var(--cyan) 0%, var(--purple) 50%);
+}
+
+/* 涨跌文字发光：浅色下弱化或取消 */
+[data-theme="classic-white"] .stat-value.up,
+[data-theme="warm-cream"] .stat-value.up,
+[data-theme="mint"] .stat-value.up,
+[data-theme="sky"] .stat-value.up,
+[data-theme="sakura"] .stat-value.up,
+[data-theme="lavender"] .stat-value.up,
+[data-theme="classic-white"] .stat-value.down,
+[data-theme="warm-cream"] .stat-value.down,
+[data-theme="mint"] .stat-value.down,
+[data-theme="sky"] .stat-value.down,
+[data-theme="sakura"] .stat-value.down,
+[data-theme="lavender"] .stat-value.down {
+  text-shadow: none;
+}
+
+/* 悬浮阴影：浅色用柔和灰 */
+[data-theme="classic-white"] .stat-card,
+[data-theme="warm-cream"] .stat-card,
+[data-theme="mint"] .stat-card,
+[data-theme="sky"] .stat-card,
+[data-theme="sakura"] .stat-card,
+[data-theme="lavender"] .stat-card,
+[data-theme="classic-white"] .card,
+[data-theme="warm-cream"] .card,
+[data-theme="mint"] .card,
+[data-theme="sky"] .card,
+[data-theme="sakura"] .card,
+[data-theme="lavender"] .card {
+  background: var(--bg-1);
+}
+
+[data-theme="classic-white"] .stat-card:hover,
+[data-theme="warm-cream"] .stat-card:hover,
+[data-theme="mint"] .stat-card:hover,
+[data-theme="sky"] .stat-card:hover,
+[data-theme="sakura"] .stat-card:hover,
+[data-theme="lavender"] .stat-card:hover {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.06);
+}
+
+[data-theme="classic-white"] .card:hover,
+[data-theme="warm-cream"] .card:hover,
+[data-theme="mint"] .card:hover,
+[data-theme="sky"] .card:hover,
+[data-theme="sakura"] .card:hover,
+[data-theme="lavender"] .card:hover {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+}
+
+/* 指挥官卡片 */
+[data-theme="classic-white"] .commander-card,
+[data-theme="warm-cream"] .commander-card,
+[data-theme="mint"] .commander-card,
+[data-theme="sky"] .commander-card,
+[data-theme="sakura"] .commander-card,
+[data-theme="lavender"] .commander-card {
+  background: var(--bg-1);
+}
+
+/* Agent 角色卡片 */
+[data-theme="classic-white"] .agent-char,
+[data-theme="warm-cream"] .agent-char,
+[data-theme="mint"] .agent-char,
+[data-theme="sky"] .agent-char,
+[data-theme="sakura"] .agent-char,
+[data-theme="lavender"] .agent-char {
+  background: var(--bg-1);
+}
+
+/* 头像渐变 */
+[data-theme="classic-white"] .commander-avatar,
+[data-theme="warm-cream"] .commander-avatar,
+[data-theme="mint"] .commander-avatar,
+[data-theme="sky"] .commander-avatar,
+[data-theme="sakura"] .commander-avatar,
+[data-theme="lavender"] .commander-avatar {
+  background: linear-gradient(135deg, var(--cyan), var(--purple));
+  box-shadow: 0 4px 12px var(--cyan-glow);
+}
+
+/* 滚动条 */
+[data-theme="classic-white"] .scroll::-webkit-scrollbar-thumb,
+[data-theme="warm-cream"] .scroll::-webkit-scrollbar-thumb,
+[data-theme="mint"] .scroll::-webkit-scrollbar-thumb,
+[data-theme="sky"] .scroll::-webkit-scrollbar-thumb,
+[data-theme="sakura"] .scroll::-webkit-scrollbar-thumb,
+[data-theme="lavender"] .scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+}
+
+/* 表格头部 */
+[data-theme="classic-white"] thead,
+[data-theme="warm-cream"] thead,
+[data-theme="mint"] thead,
+[data-theme="sky"] thead,
+[data-theme="sakura"] thead,
+[data-theme="lavender"] thead {
+  background: var(--bg-3);
 }
 </style>
 <link rel="stylesheet" href="/static/pet-widget.css?v=20260701-2">
@@ -398,12 +1078,73 @@ tr:hover td { background: rgba(255,255,255,0.03); }
 <div class="app-header">
   <h1><span class="acc">⟠</span> A股全自动智能交易系统</h1>
   <div class="header-right">
-    <span id="headerTime" style="color:#64748b"></span>
+    <span id="headerTime" style="color:var(--text-3)"></span>
     <!-- 运行模式按钮：仅控制界面轮询频率和状态显示，不影响真实交易时间校验 -->
     <button id="forceDecisionBtn" class="btn btn-outline btn-sm" onclick="toggleForceDecisionMode()" style="font-size:12px;padding:5px 12px;display:flex;align-items:center;gap:5px;" title="仅控制界面刷新频率，真实买卖严格按A股交易时间执行">
       <span id="forceDecisionIcon">📊</span>
       <span id="forceDecisionText">持续运行中</span>
     </button>
+    <!-- 主题切换器 -->
+    <div class="theme-switcher">
+      <button class="theme-btn" onclick="toggleThemeMenu(event)" title="切换主题">🎨</button>
+      <div class="theme-menu" id="themeMenu">
+        <div class="theme-group-header">深色主题</div>
+        <button class="theme-option active" data-theme="" onclick="setTheme('')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #22d3ee, #a78bfa);"></span>
+          <span class="theme-label">午夜青蓝</span>
+        </button>
+        <button class="theme-option" data-theme="matrix" onclick="setTheme('matrix')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #00ff41, #00cc33);"></span>
+          <span class="theme-label">矩阵绿</span>
+        </button>
+        <button class="theme-option" data-theme="sunset" onclick="setTheme('sunset')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #ff6b35, #ffc857);"></span>
+          <span class="theme-label">落日橙</span>
+        </button>
+        <button class="theme-option" data-theme="nebula" onclick="setTheme('nebula')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #b388ff, #ea80fc);"></span>
+          <span class="theme-label">星云紫</span>
+        </button>
+        <button class="theme-option" data-theme="deep-ocean" onclick="setTheme('deep-ocean')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #001428, #003366);"></span>
+          <span class="theme-label">深海蓝</span>
+        </button>
+        <button class="theme-option" data-theme="blood" onclick="setTheme('blood')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #8b0000, #ff4444);"></span>
+          <span class="theme-label">血红</span>
+        </button>
+        <button class="theme-option" data-theme="golden" onclick="setTheme('golden')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #1a1a00, #ffd700);"></span>
+          <span class="theme-label">金色年华</span>
+        </button>
+        <div class="theme-divider"></div>
+        <div class="theme-group-header">浅色主题</div>
+        <button class="theme-option" data-theme="classic-white" onclick="setTheme('classic-white')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #ffffff, #cccccc);"></span>
+          <span class="theme-label">经典白</span>
+        </button>
+        <button class="theme-option" data-theme="warm-cream" onclick="setTheme('warm-cream')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #fdfbf7, #e8dfd0);"></span>
+          <span class="theme-label">米色暖意</span>
+        </button>
+        <button class="theme-option" data-theme="mint" onclick="setTheme('mint')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #f0f9f4, #a5d6b8);"></span>
+          <span class="theme-label">薄荷绿</span>
+        </button>
+        <button class="theme-option" data-theme="sky" onclick="setTheme('sky')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #f0f7ff, #90caf9);"></span>
+          <span class="theme-label">天空蓝</span>
+        </button>
+        <button class="theme-option" data-theme="sakura" onclick="setTheme('sakura')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #fff5f7, #ef9a9a);"></span>
+          <span class="theme-label">樱花粉</span>
+        </button>
+        <button class="theme-option" data-theme="lavender" onclick="setTheme('lavender')">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #f5f0ff, #b39ddb);"></span>
+          <span class="theme-label">薰衣草紫</span>
+        </button>
+      </div>
+    </div>
     <span class="engine-badge" id="engineBadge">
       <span class="dot" id="engineDot"></span>
       <span id="engineStatus">启动中...</span>
@@ -439,7 +1180,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
   <div class="action-bar">
     <button class="btn btn-primary btn-sm" onclick="resetAccount()">⟳ 重置（设新初始金额）</button>
     <button class="btn btn-outline btn-sm" onclick="refreshAll()">⟳ 刷新</button>
-    <span style="font-size:12px;color:#64748b;margin-left:auto" id="lastUpdate"></span>
+    <span style="font-size:12px;color:var(--text-3);margin-left:auto" id="lastUpdate"></span>
   </div>
 
   <!-- Charts row -->
@@ -452,14 +1193,14 @@ tr:hover td { background: rgba(255,255,255,0.03); }
       <div class="card-title">引擎策略参数</div>
       <div id="engineParams">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;">
-          <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">止盈线</span><br><span style="font-size:18px;font-weight:600;color:#4ade80" id="pTakeProfit">5%</span></div>
-          <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">止损线</span><br><span style="font-size:18px;font-weight:600;color:#ef4444" id="pStopLoss">3%</span></div>
-          <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">移动止损</span><br><span style="font-size:18px;font-weight:600;color:#facc15" id="pTrailing">4%</span></div>
-          <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">最大持仓</span><br><span style="font-size:18px;font-weight:600" id="pMaxPos">5</span></div>
-          <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">买入最低评分</span><br><span style="font-size:18px;font-weight:600;color:#60a5fa" id="pMinScore">60</span></div>
-          <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">期望年化</span><br><span style="font-size:18px;font-weight:600;color:#60a5fa" id="pTargetReturn">15%</span></div>
-          <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">决策模型</span><br><span style="font-size:14px;font-weight:600;color:#c084fc" id="pAiModel">DeepSeek</span></div>
-          <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:#64748b">决策模式</span><br><span style="font-size:14px;font-weight:600;color:#64748b" id="pDecisionMode">按交易时间</span></div>
+          <div style="padding:10px;background:var(--bg-3);border-radius:var(--r-md);"><span style="color:var(--text-3)">止盈线</span><br><span style="font-size:18px;font-weight:600;color:var(--green)" id="pTakeProfit">5%</span></div>
+          <div style="padding:10px;background:var(--bg-3);border-radius:var(--r-md);"><span style="color:var(--text-3)">止损线</span><br><span style="font-size:18px;font-weight:600;color:var(--red)" id="pStopLoss">3%</span></div>
+          <div style="padding:10px;background:var(--bg-3);border-radius:var(--r-md);"><span style="color:var(--text-3)">移动止损</span><br><span style="font-size:18px;font-weight:600;color:var(--amber)" id="pTrailing">4%</span></div>
+          <div style="padding:10px;background:var(--bg-3);border-radius:var(--r-md);"><span style="color:var(--text-3)">最大持仓</span><br><span style="font-size:18px;font-weight:600" id="pMaxPos">5</span></div>
+          <div style="padding:10px;background:var(--bg-3);border-radius:var(--r-md);"><span style="color:var(--text-3)">买入最低评分</span><br><span style="font-size:18px;font-weight:600;color:var(--cyan)" id="pMinScore">60</span></div>
+          <div style="padding:10px;background:var(--bg-3);border-radius:var(--r-md);"><span style="color:var(--text-3)">期望年化</span><br><span style="font-size:18px;font-weight:600;color:var(--cyan)" id="pTargetReturn">15%</span></div>
+          <div style="padding:10px;background:var(--bg-3);border-radius:var(--r-md);"><span style="color:var(--text-3)">决策模型</span><br><span style="font-size:14px;font-weight:600;color:var(--purple)" id="pAiModel">DeepSeek</span></div>
+          <div style="padding:10px;background:var(--bg-3);border-radius:var(--r-md);"><span style="color:var(--text-3)">决策模式</span><br><span style="font-size:14px;font-weight:600;color:var(--text-2)" id="pDecisionMode">按交易时间</span></div>
         </div>
       </div>
     </div>
@@ -472,7 +1213,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
       <div id="portfolioContent" class="scroll"></div>
     </div>
     <div class="card">
-      <div class="card-title">🎯 Agent 选股推荐 <span style="font-size:11px;color:#475569;font-weight:400;">（候选猎手 + 总指挥）</span></div>
+      <div class="card-title">🎯 Agent 选股推荐 <span style="font-size:11px;color:var(--text-3);font-weight:400;">（候选猎手 + 总指挥）</span></div>
       <div id="picksContent" class="scroll"></div>
     </div>
   </div>
@@ -482,19 +1223,19 @@ tr:hover td { background: rgba(255,255,255,0.03); }
   <div id="dashboardCommanderCard" class="commander-card" style="margin-top:16px;">
     <div class="commander-left">
       <div class="commander-avatar" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;">
-        <i data-lucide="crosshair" style="color:#fff;width:28px;height:28px;"></i>
+        <i data-lucide="crosshair" style="color:#ffffff;width:28px;height:28px;"></i>
       </div>
       <div class="commander-info">
-        <div class="commander-name">总指挥 <span style="font-size:12px;color:#64748b;font-weight:400;">主控 Agent</span></div>
+        <div class="commander-name">总指挥 <span style="font-size:12px;color:var(--text-3);font-weight:400;">主控 Agent</span></div>
         <div id="dashMainAgentStatus" class="commander-status">空闲</div>
       </div>
       <div style="margin-left:auto;text-align:right;">
-        <div style="font-size:11px;color:#64748b;">下次决策</div>
-        <div id="dashNextTick" style="font-size:16px;font-weight:600;color:#60a5fa;font-variant-numeric:tabular-nums;">--:--</div>
+        <div style="font-size:11px;color:var(--text-3);">下次决策</div>
+        <div id="dashNextTick" style="font-size:16px;font-weight:600;color:var(--cyan);font-variant-numeric:tabular-nums;">--:--</div>
       </div>
     </div>
     <div id="dashMainAgentContent" class="commander-body">
-      <div style="color:#64748b;font-size:13px;">等待下一次决策周期...</div>
+      <div style="color:var(--text-3);font-size:13px;">等待下一次决策周期...</div>
     </div>
   </div>
 
@@ -503,7 +1244,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
     <div class="card">
       <div class="card-title">
         <span>🤝 专家团队</span>
-        <span id="dashAgentTeamStatus" style="font-size:11px;color:#475569;font-weight:400;"></span>
+        <span id="dashAgentTeamStatus" style="font-size:11px;color:var(--text-3);font-weight:400;"></span>
       </div>
       <div id="dashAgentTeamGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
         <!-- 由 JS 动态生成 -->
@@ -512,7 +1253,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
     <div class="card">
       <div class="card-title">
         <span>🧠 最近 Agent 决策</span>
-        <a href="javascript:void(0)" onclick="switchTab('agent')" style="font-size:11px;color:#60a5fa;text-decoration:none;font-weight:400;margin-left:auto;">查看全部 →</a>
+        <a href="javascript:void(0)" onclick="switchTab('agent')" style="font-size:11px;color:var(--cyan);text-decoration:none;font-weight:400;margin-left:auto;">查看全部 →</a>
       </div>
       <div id="dashAgentTimeline" class="scroll" style="max-height:340px;">
         <div class="loading"><div class="spinner"></div><br>加载中...</div>
@@ -527,7 +1268,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
     <div class="card" style="margin-top: 16px;">
       <div class="card-title" style="flex-wrap: wrap; gap: 12px;">
         <span>📜 交易历史记录</span>
-        <div id="tradeSummaryStats" style="display:flex;gap:16px;font-size:12px;font-weight:400;color:#94a3b8;flex-wrap:wrap;"></div>
+        <div id="tradeSummaryStats" style="display:flex;gap:16px;font-size:12px;font-weight:400;color:var(--text-2);flex-wrap:wrap;"></div>
       </div>
       <div style="overflow-x:auto;">
         <table id="tradeHistoryTable" style="width:100%;border-collapse:collapse;">
@@ -557,7 +1298,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
     <!-- AI 智能推荐（按资金档位） -->
     <div class="card" style="margin-top: 16px;">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-        <span>🌟 AI 智能推荐 <span style="font-size:11px;color:#94a3b8;font-weight:400;">（按资金档位推荐）</span></span>
+        <span>🌟 AI 智能推荐 <span style="font-size:11px;color:var(--text-2);font-weight:400;">（按资金档位推荐）</span></span>
         <div style="display:flex;gap:6px;align-items:center;">
           <div id="budgetSelector" style="display:flex;gap:4px;">
             <button class="budget-btn" data-budget="" onclick="selectBudget(this)">不限</button>
@@ -566,7 +1307,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
             <button class="budget-btn" data-budget="100000" onclick="selectBudget(this)">10万</button>
             <button class="budget-btn" data-budget="500000" onclick="selectBudget(this)">50万</button>
           </div>
-          <button onclick="loadRecommendations(true)" style="background:#1e3a5f;color:#60a5fa;border:none;padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;">刷新</button>
+          <button onclick="loadRecommendations(true)" style="background:var(--cyan-bg);color:var(--cyan);border:1px solid var(--cyan-border);padding:4px 12px;border-radius:var(--r-sm);font-size:12px;cursor:pointer;">刷新</button>
         </div>
       </div>
       <div id="recommendationsContent" class="scroll" style="max-height:600px;"></div>
@@ -580,15 +1321,15 @@ tr:hover td { background: rgba(255,255,255,0.03); }
     <div id="commanderCard" class="commander-card" style="margin-top:16px;">
       <div class="commander-left">
         <div class="commander-avatar" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;">
-          <i data-lucide="crosshair" style="color:#fff;width:28px;height:28px;"></i>
+          <i data-lucide="crosshair" style="color:#ffffff;width:28px;height:28px;"></i>
         </div>
       <div class="commander-info">
-        <div class="commander-name">总指挥 <span style="font-size:12px;color:#64748b;font-weight:400;">主控 Agent</span></div>
+        <div class="commander-name">总指挥 <span style="font-size:12px;color:var(--text-3);font-weight:400;">主控 Agent</span></div>
         <div id="mainAgentStatus" class="commander-status">空闲</div>
         </div>
       </div>
       <div id="mainAgentContent" class="commander-body">
-        <div style="color:#64748b;font-size:13px;">等待下一次决策周期...</div>
+        <div style="color:var(--text-3);font-size:13px;">等待下一次决策周期...</div>
       </div>
     </div>
 
@@ -596,7 +1337,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
     <div class="card" style="margin-top:14px;">
       <div class="card-title">
         <span>🤝 专家团队</span>
-        <span id="agentTeamStatus" style="font-size:11px;color:#475569;font-weight:400;"></span>
+        <span id="agentTeamStatus" style="font-size:11px;color:var(--text-3);font-weight:400;"></span>
       </div>
       <div id="agentTeamGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
         <!-- 由 JS 动态生成 -->
@@ -607,7 +1348,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
     <div class="card" style="margin-top: 16px;">
       <div class="card-title" style="flex-wrap: wrap; gap: 12px;">
         <span>🧠 Agent 决策时间线</span>
-        <button onclick="loadAgentTimeline()" style="background:#1e3a5f;color:#60a5fa;border:none;padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;">刷新</button>
+        <button onclick="loadAgentTimeline()" style="background:var(--cyan-bg);color:var(--cyan);border:1px solid var(--cyan-border);padding:4px 12px;border-radius:var(--r-sm);font-size:12px;cursor:pointer;">刷新</button>
       </div>
       <div id="agentTimelineContent" class="scroll" style="max-height:600px;">
         <div class="loading"><div class="spinner"></div><br>加载中...</div>
@@ -637,7 +1378,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
     <!-- 系统概述 -->
     <div class="doc-section">
       <h3>🏗️ 系统概述</h3>
-      <p>本系统是一个 <strong style="color:#e2e8f0">A股全自动模拟交易训练系统</strong>，基于 FastAPI + SQLite 构建。系统在每个交易日的交易时段自动运行，完成选股、决策、买卖、风控全流程，无需人工干预。</p>
+      <p>本系统是一个 <strong style="color:var(--text-1)">A股全自动模拟交易训练系统</strong>，基于 FastAPI + SQLite 构建。系统在每个交易日的交易时段自动运行，完成选股、决策、买卖、风控全流程，无需人工干预。</p>
       <div class="doc-flow">
         <div class="doc-flow-step"><div class="step-num">STEP 1</div><div class="step-title">全市场扫描</div><div class="step-desc">获取全A股行情 + 财务排雷</div></div>
         <div class="doc-flow-step"><div class="step-num">STEP 2</div><div class="step-title">AI 深度分析</div><div class="step-desc">技术面 + 基本面 + 财务数据</div></div>
@@ -756,7 +1497,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
       </ul>
 
       <h4>T+1 交易制度</h4>
-      <p>系统严格遵守 A 股 T+1 规则：<strong style="color:#facc15">当日买入的股票，次交易日才能卖出</strong>。通过 Lot（批次）系统实现：</p>
+      <p>系统严格遵守 A 股 T+1 规则：<strong style="color:var(--amber)">当日买入的股票，次交易日才能卖出</strong>。通过 Lot（批次）系统实现：</p>
       <ul>
         <li>每次买入创建一个新的 Lot 记录，标记 <code>buy_date = 今天</code></li>
         <li>卖出时只允许卖 <code>buy_date &lt; 今天</code> 的 Lot（即昨天及之前买的）</li>
@@ -879,7 +1620,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
         <span class="doc-tag">513050 中概互联ETF</span>
       </div>
 
-      <p style="margin-top:10px;">ETF 优势：<strong style="color:#4ade80">免印花税</strong>、T+0 交易（但系统仍按 T+1 模拟）、波动适中适合短线。</p>
+      <p style="margin-top:10px;">ETF 优势：<strong style="color:var(--green)">免印花税</strong>、T+0 交易（但系统仍按 T+1 模拟）、波动适中适合短线。</p>
     </div>
 
     <!-- 系统架构 -->
@@ -932,6 +1673,86 @@ tr:hover td { background: rgba(255,255,255,0.03); }
 </div>
 
 <script>
+// ── Theme Switcher ──
+/** Convert hex color string to rgba with given alpha */
+function hexToRgba(hex, alpha) {
+  hex = hex.replace('#', '');
+  if (hex.length !== 6) return hex;
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function setTheme(themeName) {
+  if (themeName === '') {
+    document.documentElement.removeAttribute('data-theme');
+  } else {
+    document.documentElement.setAttribute('data-theme', themeName);
+  }
+  
+  // 保存到localStorage
+  try {
+    localStorage.setItem('theme', themeName);
+  } catch(e) {}
+  
+  // 更新选中状态
+  document.querySelectorAll('.theme-option').forEach(btn => {
+    const isActive = btn.dataset.theme === themeName;
+    btn.classList.toggle('active', isActive);
+  });
+  
+  // 关闭菜单
+  document.getElementById('themeMenu').classList.remove('open');
+  
+  console.log('[主题] 已切换至:', themeName || '默认午夜青蓝');
+  
+  // 触发自定义事件，让其他组件能够响应主题变化
+  window.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: themeName } }));
+  
+  // 刷新图表配色
+  if (typeof equityChart !== 'undefined' && equityChart) {
+    const styles = getComputedStyle(document.documentElement);
+    const chartLine = styles.getPropertyValue('--cyan').trim() || '#22d3ee';
+    const chartLineBg = hexToRgba(chartLine, 0.12);
+    const chartGrid = styles.getPropertyValue('--border').trim() || '#243056';
+    const chartText = styles.getPropertyValue('--text-3').trim() || '#515f80';
+    
+    // 更新图表颜色
+    equityChart.data.datasets[0].borderColor = chartLine;
+    equityChart.data.datasets[0].backgroundColor = chartLineBg;
+    equityChart.options.scales.x.ticks.color = chartText;
+    equityChart.options.scales.y.ticks.color = chartText;
+    equityChart.options.scales.x.grid.color = chartGrid;
+    equityChart.options.scales.y.grid.color = chartGrid;
+    equityChart.update('none');
+  }
+}
+
+function toggleThemeMenu(event) {
+  event.stopPropagation();
+  const menu = document.getElementById('themeMenu');
+  menu.classList.toggle('open');
+}
+
+// 点击外部关闭主题菜单
+document.addEventListener('click', function(event) {
+  const menu = document.getElementById('themeMenu');
+  const btn = event.target.closest('.theme-btn');
+  
+  if (!btn && menu.classList.contains('open')) {
+    menu.classList.remove('open');
+  }
+});
+
+// 页面加载时恢复主题
+(function initTheme() {
+  try {
+    const savedTheme = localStorage.getItem('theme') || '';
+    setTheme(savedTheme);
+  } catch(e) {}
+})();
+
 // ── Utils ──
 async function api(url) {
   const res = await fetch(url);
@@ -1004,6 +1825,12 @@ async function loadDashboard() {
       if (curve && curve.length > 0) {
         console.log('[权益曲线] 开始渲染 Chart, Chart对象:', typeof Chart);
         const ctx = document.getElementById('equityChart').getContext('2d');
+        // 读取当前主题的 CSS 变量 (用于图表配色)
+        const styles = getComputedStyle(document.documentElement);
+        const chartLine = styles.getPropertyValue('--cyan').trim() || '#22d3ee';
+        const chartLineBg = hexToRgba(chartLine, 0.1);
+        const chartGrid = styles.getPropertyValue('--border').trim() || '#243056';
+        const chartText = styles.getPropertyValue('--text-3').trim() || '#515f80';
         equityChart = new Chart(ctx, {
           type: 'line',
           data: {
@@ -1011,8 +1838,8 @@ async function loadDashboard() {
             datasets: [{
               label: '总权益',
               data: curve.map(p => p.equity),
-              borderColor: '#4ade80',
-              backgroundColor: 'rgba(74,222,128,0.08)',
+              borderColor: chartLine,
+              backgroundColor: chartLineBg,
               fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2,
             }]
           },
@@ -1020,8 +1847,8 @@ async function loadDashboard() {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-              x: { ticks: { color:'#64748b', maxTicksLimit: 8, font:{size:10} }, grid: { color: 'rgba(255,255,255,0.05)' } },
-              y: { ticks: { color:'#64748b', font:{size:10}, callback: v => '¥'+v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' } },
+              x: { ticks: { color: chartText, maxTicksLimit: 8, font:{size:10} }, grid: { color: chartGrid } },
+              y: { ticks: { color: chartText, font:{size:10}, callback: v => '¥'+v.toLocaleString() }, grid: { color: chartGrid } },
             },
             interaction: { intersect: false, mode: 'index' }
           }
@@ -1040,7 +1867,7 @@ async function loadPortfolio() {
   const data = await api('/api/portfolio');
   const el = document.getElementById('portfolioContent');
   if (!data.positions || data.positions.length === 0) {
-    el.innerHTML = '<div class="empty-state">当前无持仓<br><small style="color:#475569">引擎正在扫描选股中...</small></div>';
+    el.innerHTML = '<div class="empty-state">当前无持仓<br><small style="color:var(--text-3)">引擎正在扫描选股中...</small></div>';
     return;
   }
   let html = `<table><thead><tr>
@@ -1055,7 +1882,7 @@ async function loadPortfolio() {
       <td class="text-right">${p.price}</td>
       <td class="text-right">${money(p.market_value)}</td>
       <td class="text-right ${cls}">${p.unrealized >= 0 ? '+' : ''}${p.unrealized.toFixed(2)}</td>
-      <td class="text-right"><span style="color:#60a5fa">${p.score || '--'}</span></td>
+      <td class="text-right"><span style="color:var(--cyan)">${p.score || '--'}</span></td>
     </tr>`;
   }
   html += `</tbody></table>`;
@@ -1098,11 +1925,11 @@ async function loadTrades() {
   const winRate = sells.length > 0 ? (wins.length / sells.length * 100).toFixed(1) : 0;
 
   summaryEl.innerHTML = `
-    <span>总交易: <strong style="color:#e2e8f0">${trades.length}</strong> 笔</span>
-    <span>已平仓: <strong style="color:#e2e8f0">${sells.length}</strong> 笔</span>
+    <span>总交易: <strong style="color:var(--text-1)">${trades.length}</strong> 笔</span>
+    <span>已平仓: <strong style="color:var(--text-1)">${sells.length}</strong> 笔</span>
     <span>胜率: <strong style="color:${winRate >= 50 ? '#4ade80' : '#ef4444'}">${winRate}%</strong></span>
-    <span>盈利: <strong style="color:#4ade80">${wins.length}</strong></span>
-    <span>亏损: <strong style="color:#ef4444">${losses.length}</strong></span>
+    <span>盈利: <strong style="color:var(--green)">${wins.length}</strong></span>
+    <span>亏损: <strong style="color:var(--red)">${losses.length}</strong></span>
     <span>累计盈亏: <strong style="color:${totalPnl >= 0 ? '#4ade80' : '#ef4444'}">${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</strong></span>
   `;
 
@@ -1136,7 +1963,7 @@ async function loadTrades() {
       <td class="text-right" style="font-variant-numeric:tabular-nums">${t.qty}</td>
       <td class="text-right" style="font-variant-numeric:tabular-nums">${money(t.gross)}</td>
       <td class="text-right text-muted" style="font-variant-numeric:tabular-nums">${t.fee.toFixed(2)}</td>
-      <td style="font-size:11px;color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${reasonShort}<div class="trade-reason-full" style="display:none;white-space:normal;margin-top:4px;color:#94a3b8;font-size:11px;line-height:1.5;padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:6px">${t.reason || ''}</div></td>
+      <td style="font-size:11px;color:var(--text-3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${reasonShort}<div class="trade-reason-full" style="display:none;white-space:normal;margin-top:4px;color:var(--text-2);font-size:11px;line-height:1.5;padding:6px 8px;background:var(--bg-3);border-radius:6px">${t.reason || ''}</div></td>
       <td class="text-right">${pnlHtml}</td>
     </tr>`;
   }
@@ -1263,11 +2090,11 @@ async function loadPicks() {
         <div><span class="pick-symbol">${p.symbol}</span> <span class="pick-name">${p.name}</span></div>
         <span class="pick-score">${score}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-2);">
         <span>${p.price || '--'} ${pct >= 0 ? '<span class="text-up">+' : '<span class="text-down">'}${pct}%</span></span>
         <span>${amount ? '成交额 ' + (amount/1e8).toFixed(1) + '亿' : (p.target ? '目标 ' + p.target : '')}</span>
       </div>
-      <div class="pick-reasons">${reasons.slice(0,4).map(r => `<span class="pick-reason">${r}</span>`).join('')}${finTags.map(t => `<span class="pick-reason" style="background:#1e3a5f;color:#60a5fa;">${t}</span>`).join('')}</div>
+      <div class="pick-reasons">${reasons.slice(0,4).map(r => `<span class="pick-reason">${r}</span>`).join('')}${finTags.map(t => `<span class="pick-reason" style="background:var(--cyan-bg);color:var(--cyan);">${t}</span>`).join('')}</div>
     </div>`;
     }).join('');
   } catch(e) {
@@ -1341,8 +2168,8 @@ function renderRecommendations(recs, budgetKey) {
   // 显示当前预算档位
   const budgetLabelText = budgetKey === 'unlimited' ? '不限' : `¥${Number(budgetKey).toLocaleString()}`;
   const budgetHeader = budgetKey === 'unlimited'
-    ? `<div style="padding:8px 12px;background:rgba(245,158,11,0.08);border-radius:6px;margin-bottom:10px;font-size:12px;color:#f59e0b;border:1px solid rgba(245,158,11,0.15);">🌟 不限预算 — 纯质量分析，可包含高价股</div>`
-    : `<div style="padding:8px 12px;background:rgba(96,165,250,0.08);border-radius:6px;margin-bottom:10px;font-size:12px;color:#60a5fa;border:1px solid rgba(96,165,250,0.15);">💰 当前预算：${budgetLabelText} — 仅推荐买得起的标的</div>`;
+    ? `<div style="padding:8px 12px;background:rgba(245,158,11,0.08);border-radius:6px;margin-bottom:10px;font-size:12px;color:var(--amber);border:1px solid rgba(245,158,11,0.15);">🌟 不限预算 — 纯质量分析，可包含高价股</div>`
+    : `<div style="padding:8px 12px;background:rgba(96,165,250,0.08);border-radius:6px;margin-bottom:10px;font-size:12px;color:var(--cyan);border:1px solid rgba(96,165,250,0.15);">💰 当前预算：${budgetLabelText} — 仅推荐买得起的标的</div>`;
   el.innerHTML = budgetHeader + recs.map(r => {
     const score = r.confidence || '--';
     const pct = Number(r.pct || 0);
@@ -1360,17 +2187,17 @@ function renderRecommendations(recs, budgetKey) {
     }
     return `<div class="pick-card" style="border-left:3px solid #f59e0b;">
       <div class="pick-header">
-        <div><span class="pick-symbol">${r.symbol}</span> <span class="pick-name">${r.name}</span> <span style="font-size:11px;color:#94a3b8;">${r.kind === 'etf' ? 'ETF' : '股票'}</span></div>
-        <span class="pick-score" style="color:#f59e0b;">${score}</span>
+        <div><span class="pick-symbol">${r.symbol}</span> <span class="pick-name">${r.name}</span> <span style="font-size:11px;color:var(--text-2);">${r.kind === 'etf' ? 'ETF' : '股票'}</span></div>
+        <span class="pick-score" style="color:var(--amber);">${score}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:13px;color:#e2e8f0;margin:6px 0;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-1);margin:6px 0;">
         <span>¥${r.price || '--'} <span class="${pct >= 0 ? 'text-up' : 'text-down'}">${pct >= 0 ? '+' : ''}${pct}%</span></span>
         ${r.target_price ? `<span>目标 ¥${r.target_price}</span>` : ''}
       </div>
-      ${finTags.length ? `<div style="margin:6px 0;">${finTags.map(t => `<span class="pick-reason" style="background:#1e3a5f;color:#60a5fa;font-size:11px;">${t}</span>`).join(' ')}</div>` : ''}
+      ${finTags.length ? `<div style="margin:6px 0;">${finTags.map(t => `<span class="pick-reason" style="background:var(--cyan-bg);color:var(--cyan);font-size:11px;">${t}</span>`).join(' ')}</div>` : ''}
       <div style="margin-top:8px;padding:8px;background:rgba(245,158,11,0.05);border-radius:6px;border:1px solid rgba(245,158,11,0.15);">
-        <div style="font-size:12px;color:#f59e0b;font-weight:600;margin-bottom:4px;">📋 ${r.reason || '推荐理由'}</div>
-        <div style="font-size:12px;color:#cbd5e1;line-height:1.6;">${r.reason_detail || ''}</div>
+        <div style="font-size:12px;color:var(--amber);font-weight:600;margin-bottom:4px;">📋 ${r.reason || '推荐理由'}</div>
+        <div style="font-size:12px;color:var(--text-1);line-height:1.6;">${r.reason_detail || ''}</div>
       </div>
     </div>`;
   }).join('');
@@ -1407,7 +2234,7 @@ async function loadDecisions() {
     el.innerHTML = decs.map(d => `<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03);font-size:13px;">
       <span class="tag tag-${d.action}">${({buy:'买入',sell:'卖出',scan:'扫描',hold:'等待'})[d.action]||d.action}</span>
       ${d.symbol ? `<strong>${d.symbol}</strong>` : ''}
-      ${d.score ? `<span style="color:#60a5fa">${d.score}分</span>` : ''}
+      ${d.score ? `<span style="color:var(--cyan)">${d.score}分</span>` : ''}
       <span class="text-muted" style="flex:1">${d.reason||''}</span>
       <small class="text-muted">${d.time.slice(5,16)}</small>
     </div>`).join('');
@@ -1609,7 +2436,7 @@ function _updateCommanderAndTeam(s, cardId, mainElId, mainStatusId, gridId, team
   } else if (ma.status === 'done' && ma.decision) {
     mainEl.innerHTML = `<div class="commander-decision">📋 最终决策: ${esc(ma.decision)}</div>`;
   } else {
-    mainEl.innerHTML = '<div style="color:#64748b;font-size:13px;">等待下一次决策周期...</div>';
+    mainEl.innerHTML = '<div style="color:var(--text-3);font-size:13px;">等待下一次决策周期...</div>';
   }
 
   // ── 子 Agent 团队 ──
@@ -1650,14 +2477,14 @@ function _updateCommanderAndTeam(s, cardId, mainElId, mainStatusId, gridId, team
     const name = ag.name || ac.key;
     const thinkingHtml = ag.thinking
       ? `<div class="agent-char-thinking">💭 ${esc(ag.thinking)}</div>`
-      : (cls === 'idle' ? `<div class="agent-char-thinking" style="color:#475569;">等待指令...</div>` : '');
+      : (cls === 'idle' ? `<div class="agent-char-thinking" style="color:var(--text-3);">等待指令...</div>` : '');
     const resultHtml = ag.result
       ? `<div class="agent-char-result">✅ ${esc(ag.result)}</div>`
       : '';
     gridHtml += `<div class="agent-char ${cls}">
       <div class="agent-char-header">
         <div class="agent-char-avatar" style="background:${ac.bg};display:flex;align-items:center;justify-content:center;border:none;">
-          <i data-lucide="${ac.icon}" style="color:#fff;width:20px;height:20px;"></i>
+          <i data-lucide="${ac.icon}" style="color:#ffffff;width:20px;height:20px;"></i>
         </div>
         <div class="agent-char-meta">
           <div class="agent-char-name">${esc(name)}</div>
@@ -1709,7 +2536,7 @@ async function loadAgentTimeline() {
     const data = await api('/api/agent/cycles?limit=20');
     const el = document.getElementById('agentTimelineContent');
     if (!data || data.length === 0) {
-      el.innerHTML = '<div class="empty-state">暂无 Agent 决策记录<br><span style="font-size:12px;color:#475569;">引擎启动后，每 3 分钟生成一次决策链</span></div>';
+      el.innerHTML = '<div class="empty-state">暂无 Agent 决策记录<br><span style="font-size:12px;color:var(--text-3);">引擎启动后，每 3 分钟生成一次决策链</span></div>';
       return;
     }
     el.innerHTML = data.map(c => {
@@ -1726,7 +2553,7 @@ async function loadAgentTimeline() {
       actions.forEach(a => actionSummary.push(`${zh(a.action||'?')} ${esc(a.symbol||'')}`));
       buys.forEach(b => actionSummary.push(`买入 ${esc(b.symbol||'')}`));
       const actionHtml = actionSummary.length > 0
-        ? `<div style="font-size:11px;color:#facc15;margin-top:4px;">动作: ${actionSummary.join('，')}</div>`
+        ? `<div style="font-size:11px;color:var(--amber);margin-top:4px;">动作: ${actionSummary.join('，')}</div>`
         : '';
       // 额外信息行
       const metaParts = [];
@@ -1735,7 +2562,7 @@ async function loadAgentTimeline() {
       if (plan.cash_reserve_target != null) metaParts.push(`现金保留: ${(plan.cash_reserve_target*100).toFixed(0)}%`);
       if (plan.confidence) metaParts.push(`信心: ${(plan.confidence*100).toFixed(0)}%`);
       const metaHtml = metaParts.length > 0
-        ? `<div style="font-size:11px;color:#94a3b8;margin-top:4px;">${metaParts.join(' · ')}</div>`
+        ? `<div style="font-size:11px;color:var(--text-2);margin-top:4px;">${metaParts.join(' · ')}</div>`
         : '';
       return `<div class="timeline-item">
         <div class="timeline-header">
@@ -1760,7 +2587,7 @@ async function loadDashboardAgentTimeline() {
     const data = await api('/api/agent/cycles?limit=5');
     const el = document.getElementById('dashAgentTimeline');
     if (!data || data.length === 0) {
-      el.innerHTML = '<div class="empty-state">暂无 Agent 决策记录<br><span style="font-size:12px;color:#475569;">引擎启动后，每 3 分钟生成一次决策链</span></div>';
+      el.innerHTML = '<div class="empty-state">暂无 Agent 决策记录<br><span style="font-size:12px;color:var(--text-3);">引擎启动后，每 3 分钟生成一次决策链</span></div>';
       return;
     }
     el.innerHTML = data.map(c => {
@@ -1774,7 +2601,7 @@ async function loadDashboardAgentTimeline() {
       actions.forEach(a => actionSummary.push(`${zh(a.action||'?')} ${esc(a.symbol||'')}`));
       buys.forEach(b => actionSummary.push(`买入 ${esc(b.symbol||'')}`));
       const actionHtml = actionSummary.length > 0
-        ? `<div style="font-size:11px;color:#facc15;margin-top:4px;">动作: ${actionSummary.join('，')}</div>`
+        ? `<div style="font-size:11px;color:var(--amber);margin-top:4px;">动作: ${actionSummary.join('，')}</div>`
         : '';
       return `<div class="timeline-item">
         <div class="timeline-header">
@@ -1808,7 +2635,7 @@ async function loadAgentMemory() {
     const data = await api(`/api/agent/memory${scopeParam}`);
     const el = document.getElementById('agentMemoryContent');
     if (!data || data.length === 0) {
-      el.innerHTML = '<div class="empty-state">暂无 Agent 记忆<br><span style="font-size:12px;color:#475569;">系统会在每次决策后积累记忆</span></div>';
+      el.innerHTML = '<div class="empty-state">暂无 Agent 记忆<br><span style="font-size:12px;color:var(--text-3);">系统会在每次决策后积累记忆</span></div>';
       return;
     }
     el.innerHTML = data.map(m => {
@@ -1821,7 +2648,7 @@ async function loadAgentMemory() {
           <span class="memory-type">${esc(m.memory_type)}</span>
           <span class="memory-date">${esc(m.memory_date)}</span>
         </div>
-        <div class="memory-content"><pre style="white-space:pre-wrap;font-size:12px;color:#94a3b8;margin:0;">${esc(contentStr)}</pre></div>
+        <div class="memory-content"><pre style="white-space:pre-wrap;font-size:12px;color:var(--text-2);margin:0;">${esc(contentStr)}</pre></div>
         ${tagsHtml ? `<div class="memory-tags">${tagsHtml}</div>` : ''}
       </div>`;
     }).join('');
