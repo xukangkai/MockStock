@@ -1070,6 +1070,68 @@ tr:hover td { background: rgba(34,211,238,0.02); }
 [data-theme="lavender"] thead {
   background: var(--bg-3);
 }
+
+/* Reset Modal */
+.reset-modal {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+}
+.reset-modal.show { display: flex; }
+.reset-modal-content {
+  background: #1a1a2e;
+  border: 1px solid #2a2a4a;
+  border-radius: 12px;
+  padding: 24px;
+  width: 360px;
+  max-width: 90%;
+}
+.reset-modal-content h3 {
+  font-size: 16px;
+  margin-bottom: 16px;
+  color: #e2e8f0;
+}
+.reset-modal-content input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #3a3a5a;
+  border-radius: 8px;
+  background: #0f0f1a;
+  color: #e2e8f0;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+.reset-modal-content input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+.reset-modal-btns {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.reset-modal-btns button {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.reset-modal-btns .cancel-btn {
+  background: #374151;
+  color: #9ca3af;
+}
+.reset-modal-btns .confirm-btn {
+  background: #3b82f6;
+  color: #fff;
+}
+.reset-modal-btns .confirm-btn:hover {
+  background: #2563eb;
+}
 </style>
 <link rel="stylesheet" href="/static/pet-widget.css?v=20260701-2">
 </head>
@@ -1149,6 +1211,18 @@ tr:hover td { background: rgba(34,211,238,0.02); }
       <span class="dot" id="engineDot"></span>
       <span id="engineStatus">启动中...</span>
     </span>
+  </div>
+</div>
+
+<!-- Reset Modal -->
+<div class="reset-modal" id="resetModal">
+  <div class="reset-modal-content">
+    <h3>⟳ 重置账户</h3>
+    <input type="number" id="resetCashInput" placeholder="请输入初始模拟金额(元)" value="10000">
+    <div class="reset-modal-btns">
+      <button class="cancel-btn" onclick="closeResetModal()">取消</button>
+      <button class="confirm-btn" onclick="confirmReset()">确认重置</button>
+    </div>
   </div>
 </div>
 
@@ -1583,6 +1657,94 @@ tr:hover td { background: rgba(34,211,238,0.02); }
         <li>候选股票详细数据：实时行情 + 技术指标（MA/MACD/RSI/KDJ/布林带）+ 估值（PE/PB/市值）+ 财务（净利润增速/营收增速/EPS）</li>
         <li>市场情绪分析（涨跌比、涨停跌停数、平均涨跌幅）</li>
       </ul>
+
+      <h4>🗺️ 决策流程图</h4>
+      <style>
+        .doc-flow { margin: 6px 0 2px; }
+        .flow-stage { margin-bottom: 2px; }
+        .flow-stage-title {
+          font-size: 12px; color: #22d3ee; font-weight: 700;
+          margin: 10px 0 8px; display: flex; align-items: center; gap: 6px;
+        }
+        .flow-row { display: flex; flex-wrap: wrap; gap: 10px; }
+        .flow-chain { display: flex; flex-wrap: wrap; align-items: stretch; gap: 4px; }
+        .flow-node {
+          flex: 1 1 0; min-width: 110px;
+          background: #1b2138; border: 1px solid #2c3354;
+          border-radius: 10px; padding: 9px 10px;
+          font-size: 12px; color: #e2e8f0; line-height: 1.5; text-align: center;
+        }
+        .flow-node b { color: #22d3ee; font-weight: 700; }
+        .flow-node small { color: #94a3b8; font-size: 11px; }
+        .flow-node-risk {
+          border-color: #ef4444; background: rgba(239,68,68,0.10);
+          color: #fecaca; flex-basis: 100%;
+        }
+        .flow-node-agent { flex: 0 1 auto; min-width: 108px; background: rgba(96,165,250,0.10); border-color: rgba(96,165,250,0.40); }
+        .flow-node-cmd { background: rgba(168,85,247,0.16); border-color: rgba(168,85,247,0.55); color: #fff; }
+        .flow-node-do { border-color: #22c55e; background: rgba(34,197,94,0.10); }
+        .flow-arrow { text-align: center; color: #64748b; font-size: 16px; line-height: 18px; margin: 1px 0; }
+        .flow-chain .flow-arrow { display: flex; align-items: center; margin: 0 1px; font-size: 15px; }
+      </style>
+
+      <div class="doc-flow">
+        <!-- ① 数据准备 -->
+        <div class="flow-stage">
+          <div class="flow-stage-title">① 数据准备（每轮决策并行获取）</div>
+          <div class="flow-row">
+            <div class="flow-node"><b>📊 持仓上下文</b><br><small>实时价/盈亏%/持有天数/止损/近K线</small></div>
+            <div class="flow-node"><b>🔍 候选池精筛</b><br><small>成交额Top150·剔除涨幅&gt;6%与强下跌趋势</small></div>
+            <div class="flow-node"><b>🏛️ 真实大盘</b><br><small>沪/深/创业板/沪深300 + 📰财经新闻</small></div>
+            <div class="flow-node"><b>📈 市场情绪</b><br><small>涨跌家数比 → 情绪分数</small></div>
+            <div class="flow-node"><b>💰 账户信息</b><br><small>现金/最大持仓/剩余名额</small></div>
+          </div>
+        </div>
+
+        <div class="flow-arrow">↓</div>
+
+        <!-- ② 硬风控前置 -->
+        <div class="flow-stage">
+          <div class="flow-stage-title">② 硬风控前置（不依赖 AI，强制生效）</div>
+          <div class="flow-row">
+            <div class="flow-node flow-node-risk">🚨 <b>止损 / 止盈线触发</b>：亏损达硬止损线或破止损价 → 强制卖出；盈利达标 → 止损上移至成本线（盈利保护）；受 T+1 限制则标记锁定，暂不开仓</div>
+          </div>
+        </div>
+
+        <div class="flow-arrow">↓</div>
+
+        <!-- ③ 多 Agent 流水线 -->
+        <div class="flow-stage">
+          <div class="flow-stage-title">③ 多 Agent 决策流水线（LangGraph 编排）</div>
+          <div class="flow-chain">
+            <div class="flow-node flow-node-agent"><b>🧠 记忆召回</b><br><small>近期决策/市场观察</small></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-node flow-node-agent"><b>📊 市场分析师</b><br><small>大盘格局/风险偏好/板块</small></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-node flow-node-agent"><b>💼 持仓管家</b><br><small>加/持/减/退 + 目标仓位</small></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-node flow-node-agent"><b>🔍 候选猎手</b><br><small>0-3只买入推荐</small></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-node flow-node-agent"><b>🛡️ 风控卫士</b><br><small>风险等级/强制止损</small></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-node flow-node-agent flow-node-cmd"><b>🎯 总指挥</b><br><small>最终计划</small></div>
+          </div>
+        </div>
+
+        <div class="flow-arrow">↓</div>
+
+        <!-- ④ 校验 + 执行 -->
+        <div class="flow-stage">
+          <div class="flow-stage-title">④ 计划校验与执行（需通过全部硬规则）</div>
+          <div class="flow-row">
+            <div class="flow-node"><b>✅ 计划校验</b><br><small>validate_final_trading_plan<br>异常 → 安全计划(维持现状)</small></div>
+            <div class="flow-node flow-node-do"><b>📝 持仓动作</b><br><small>加/持/减/退 → exec_sell/buy</small></div>
+            <div class="flow-node flow-node-do"><b>🛒 新开仓</b><br><small>名额/日限额/追高拦截 → exec_buy</small></div>
+          </div>
+        </div>
+        <p style="font-size:11px;color:#64748b;margin:8px 0 0;line-height:1.6;">
+          ⚠️ AI 决策仅为"建议"：硬风控先于 AI 执行且不可被 AI 覆盖；非交易时段或 <code style="background:#3a2a12;color:#fbbf24;padding:1px 5px;border-radius:4px;font-size:11px;">FORCE_TRADING</code> 未开启时仅记录计划、不真实下单。
+        </p>
+      </div>
     </div>
 
     <!-- ETF 池 -->
@@ -1786,10 +1948,8 @@ async function refreshAll() {
   loadDashboard().catch(e => console.error('dashboard', e));
   loadPortfolio().catch(e => console.error('portfolio', e));
   loadEngineStatus().catch(e => console.error('engine', e));
-  // AI选股接口消耗 token，仅交易时间自动刷新
-  if (isTradingHours()) {
-    loadPicks().catch(e => console.error('picks', e));
-  }
+  // 选股推荐只读后端缓存、不消耗 token，任何时段都展示最新推荐
+  loadPicks().catch(e => console.error('picks', e));
   // Agent 决策链（首页核心）
   loadDashboardAgentTimeline().catch(e => console.error('dash agent timeline', e));
   // Agent tab 专用数据（仅 tab 可见时加载）
@@ -2658,12 +2818,25 @@ async function loadAgentMemory() {
 }
 
 async function resetAccount() {
-  const cash = prompt('请输入初始模拟金额(元)：', '100000');
-  if (!cash || isNaN(cash)) return;
+  document.getElementById('resetModal').classList.add('show');
+  document.getElementById('resetCashInput').focus();
+}
+
+function closeResetModal() {
+  document.getElementById('resetModal').classList.remove('show');
+}
+
+async function confirmReset() {
+  const cash = document.getElementById('resetCashInput').value;
+  if (!cash || isNaN(cash) || parseFloat(cash) <= 0) {
+    alert('请输入有效的金额');
+    return;
+  }
   try {
     const res = await fetch(`/api/account/init?initial_cash=${parseFloat(cash)}&force=true`, {method:'POST'});
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || '重置失败');
+    closeResetModal();
     alert(`✅ 账户已重置为 ¥${parseFloat(cash).toLocaleString()}，引擎自动运行中！`);
     refreshAll();
   } catch(e) {

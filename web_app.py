@@ -572,6 +572,74 @@ def fetch_market_news() -> List[Dict]:
     except Exception:
         return []
 
+
+def _call_with_timeout(func, timeout: float = 15, default=None):
+    """在 daemon 线程中执行 func，超时返回 default，避免联网挂起阻塞调用方。
+
+    akshare 等网络请求可能长时间挂起且不支持 timeout 参数；此函数用独立
+    daemon 线程执行，主线程 join 指定秒数后即返回，挂起的请求在后台自行结束。
+    注意：signal.alarm 仅主线程可用，引擎决策在子线程，故改用线程方案。
+    """
+    import threading
+    box = {"v": default}
+
+    def _runner():
+        try:
+            box["v"] = func()
+        except Exception:
+            pass
+
+    t = threading.Thread(target=_runner, daemon=True)
+    t.start()
+    t.join(timeout=timeout)
+    return box["v"]
+
+
+def fetch_market_indices() -> Dict[str, Dict]:
+    """获取主要大盘指数的实时点位与涨跌幅，供市场分析师判断真实大盘环境。
+
+    返回形如 {"上证指数": {"name": "上证指数", "price": 3200.0, "pct": 1.23}, ...}
+    多数据源容错（东方财富优先，新浪兜底），全部失败时返回空字典，不影响主流程。
+    """
+    targets = ["上证指数", "深证成指", "创业板指", "沪深300"]
+
+    def _parse(df) -> Dict[str, Dict]:
+        if df is None or getattr(df, "empty", True) or "名称" not in getattr(df, "columns", []):
+            return {}
+        result = {}
+        for name in targets:
+            row = df[df["名称"] == name]
+            if row.empty:
+                continue
+            r = row.iloc[0]
+            try:
+                price = float(r.get("最新价", 0) or 0)
+            except (TypeError, ValueError):
+                price = 0.0
+            try:
+                pct = float(r.get("涨跌幅", 0) or 0)
+            except (TypeError, ValueError):
+                pct = 0.0
+            if not (price or pct):
+                continue
+            result[name] = {"name": name, "price": round(price, 2), "pct": round(pct, 2)}
+        return result
+
+    try:
+        import akshare as ak
+        for fetcher in (ak.stock_zh_index_spot_em, ak.stock_zh_index_spot_sina):
+            try:
+                df = fetcher()
+            except Exception:
+                continue
+            result = _parse(df)
+            if result:
+                return result
+    except Exception:
+        pass
+    return {}
+
+
 # ═════════════════════════════════════════════════════
 #  基本面财务数据获取与排雷
 # ═════════════════════════════════════════════════════
@@ -885,21 +953,47 @@ def safe_json_loads(raw: str, default):
 #  Agent 上下文与记忆辅助函数
 # ═════════════════════════════════════════════════════
 def summarize_candidate_for_agent(stock: Dict[str, Any]) -> Dict[str, Any]:
-    """构造给 Agent 使用的轻量候选摘要，避免在候选池阶段丢失大部分市场视角。"""
+    """构造给 Agent 使用的候选摘要，包含完整技术指标供AI判断趋势/超买超卖。"""
     summary = {
         "symbol": stock.get("symbol", ""),
         "name": stock.get("name", ""),
         "price": float(stock.get("price", 0) or 0),
         "pct": float(stock.get("pct", 0) or 0),
         "amount": float(stock.get("amount", 0) or 0),
+        # 均线
         "ma5": stock.get("ma5"),
+        "ma10": stock.get("ma10"),
+        "ma20": stock.get("ma20"),
+        "trend": stock.get("trend"),
+        # 基本面
         "pe": stock.get("pe"),
         "pb": stock.get("pb"),
         "net_profit_yoy": stock.get("net_profit_yoy"),
         "revenue_yoy": stock.get("revenue_yoy"),
         "is_etf": bool(stock.get("is_etf", False)),
+        # 价格区间
         "recent_high": stock.get("recent_high"),
         "recent_low": stock.get("recent_low"),
+        # RSI（超买超卖）
+        "rsi6": stock.get("rsi6"),
+        "rsi14": stock.get("rsi14"),
+        # KDJ
+        "kdj_k": stock.get("kdj_k"),
+        "kdj_d": stock.get("kdj_d"),
+        "kdj_j": stock.get("kdj_j"),
+        # 布林带
+        "boll_upper": stock.get("boll_upper"),
+        "boll_mid": stock.get("boll_mid"),
+        "boll_lower": stock.get("boll_lower"),
+        # 动量
+        "momentum_5d": stock.get("momentum_5d"),
+        "momentum_10d": stock.get("momentum_10d"),
+        # MACD
+        "macd_dif": stock.get("macd_dif"),
+        "macd_dea": stock.get("macd_dea"),
+        "macd_hist": stock.get("macd_hist"),
+        # 量比
+        "vol_ratio": stock.get("vol_ratio"),
     }
     return summary
 
@@ -908,7 +1002,9 @@ def build_agent_cycle_context(cycle_id: str, timestamp: str, account_info: Dict,
                               positions_ctx: List[Dict], candidates_ctx: List[Dict],
                               market_sentiment: Dict, engine_params: Dict,
                               recent_trades: List[Dict], recent_decisions: List[Dict],
-                              memory_summary: Dict) -> Dict:
+                              memory_summary: Dict,
+                              market_indices: Dict[str, Dict] = None,
+                              market_news: List[Dict] = None) -> Dict:
     # Parameter names use *_ctx/*_info suffixes, while returned keys stay aligned
     # with the stable agent payload consumed elsewhere in the harness.
     context_sections = {
@@ -920,6 +1016,8 @@ def build_agent_cycle_context(cycle_id: str, timestamp: str, account_info: Dict,
         "engine_params": engine_params,
         "recent_trades": recent_trades,
         "recent_decisions": recent_decisions,
+        "market_indices": market_indices or {},
+        "market_news": market_news or [],
     }
     return {
         "cycle_id": cycle_id,
@@ -1031,18 +1129,52 @@ def run_market_analysis_node(state: TradingAgentState) -> Dict[str, Any]:
 
     _update_agent_thinking("market", f"市场分数 {score}，情绪: {sentiment}，涨 {up_count} 跌 {down_count}，正在构建分析 prompt...")
 
+    # 真实大盘指数与财经新闻（补强市场分析师的判断维度）
+    indices = context.get("market_indices", {}) or {}
+    news = context.get("market_news", []) or []
+
+    if indices:
+        index_lines = [
+            f"- {info.get('name', k)}: {info.get('price', 0):.2f} 点 (涨跌幅 {info.get('pct', 0):+.2f}%)"
+            for k, info in indices.items()
+        ]
+        index_text = "\n".join(index_lines)
+    else:
+        index_text = "（暂时无法获取实时大盘指数数据）"
+
+    if news:
+        news_items = []
+        for n in news[:8]:
+            title = n.get("title", "")
+            t = n.get("time", "")
+            content = (n.get("content", "") or "")[:120]
+            news_items.append(f"- 【{title}】{t} — {content}")
+        news_text = "\n".join(news_items)
+    else:
+        news_text = "（暂时无法获取财经新闻数据）"
+
     prompt = f"""你是A股市场分析师，专注短线交易环境评估。
 
 ## 当前市场数据
-- 情绪分数: {score}/100
+- 情绪分数: {score}/100（基于全市场个股涨跌家数比推算）
 - 情绪状态: {sentiment}
 - 涨跌比: {up_count}:{down_count}
 - 当前持仓: {len(positions)} 只
 - 候选标的: {len(candidates)} 只
 - 可用现金: ¥{acct.get('available_cash', 0):,.0f}
 
+## 真实大盘指数（实时，比涨跌比更可靠）
+{index_text}
+
+## 最新财经新闻（政策面/行业面）
+{news_text}
+
 ## 你的任务
-分析当前市场环境，判断大盘格局和操作策略。
+分析当前市场环境，判断大盘格局和操作策略。重点关注：
+- **以真实大盘指数涨跌为准**：若沪指/深证成指/创业板指跌幅>1%应倾向防御(defensive)，涨幅>1%可偏积极(bullish)
+- **情绪面(涨跌比)与真实指数方向冲突时，以真实大盘指数为准**
+- **结合财经新闻评估政策与行业利好利空**，重大利空（如监管收紧、外围暴跌）应下调风险偏好，重大利好可上调
+- 若指数与新闻均缺失，则退回到情绪分数判断
 
 ## 输出JSON（严格）
 {{
@@ -1164,8 +1296,47 @@ def run_candidate_research_node(state: TradingAgentState) -> Dict[str, Any]:
     cand_lines = []
     for c in candidates:
         tech = []
-        if c.get("ma5"):
-            tech.append(f"MA5={c['ma5']}")
+        # 趋势与均线
+        trend = c.get("trend", "")
+        if trend:
+            tech.append(f"趋势={trend}")
+        ma5 = c.get("ma5")
+        ma10 = c.get("ma10")
+        ma20 = c.get("ma20")
+        if ma5:
+            tech.append(f"MA5={ma5}")
+        if ma10:
+            tech.append(f"MA10={ma10}")
+        if ma20:
+            tech.append(f"MA20={ma20}")
+        # RSI 超买超卖
+        rsi14 = c.get("rsi14")
+        if rsi14 is not None:
+            tech.append(f"RSI={rsi14}")
+        # KDJ
+        kdj_j = c.get("kdj_j")
+        if kdj_j is not None:
+            tech.append(f"KDJ_J={kdj_j}")
+        # 动量
+        mom5 = c.get("momentum_5d")
+        if mom5 is not None:
+            tech.append(f"5日动量={mom5:+.1f}%")
+        # 布林带位置
+        boll_upper = c.get("boll_upper")
+        boll_lower = c.get("boll_lower")
+        price = c.get("price", 0)
+        if boll_upper and boll_lower and price:
+            boll_pos = (price - boll_lower) / (boll_upper - boll_lower) * 100 if boll_upper != boll_lower else 50
+            tech.append(f"布林位置={boll_pos:.0f}%")
+        # MACD
+        macd_hist = c.get("macd_hist")
+        if macd_hist is not None:
+            tech.append(f"MACD柱={macd_hist}")
+        # 量比
+        vol_ratio = c.get("vol_ratio")
+        if vol_ratio is not None:
+            tech.append(f"量比={vol_ratio}")
+        # 基本面
         if c.get("pe"):
             tech.append(f"PE={c['pe']}")
         if c.get("net_profit_yoy") is not None:
@@ -1193,6 +1364,15 @@ def run_candidate_research_node(state: TradingAgentState) -> Dict[str, Any]:
 - 优先考虑趋势质量、流动性、风险收益比、基本面支撑与当前市场格局的匹配度。
 - 结合账户规模判断哪些标的更适合当前资金体量，但不要机械套用固定价格区间。
 - 如果没有足够有把握的标的，可以返回空数组。
+
+## 防追高/防超买纪律（务必遵守）
+- **RSI>70 视为超买**，短线追入风险大，谨慎推荐或降低信心。
+- **KDJ_J>100** 为严重超买，坚决不推荐。
+- **当日涨幅>5%** 的非ETF标的大概率次日回调，信心应大幅降低。
+- **布林位置>80%**（接近上轨）说明短期已涨到高位，追入风险大。
+- **趋势=bearish**（MA5<MA10<MA20）的股票不要做多，除非有明确反转信号。
+- 优先选择：趋势=bullish、RSI在40-65之间、布林位置在30-70%之间、MACD柱为正且放大、5日动量为正但不过高的标的。
+- 宁可空仓也不要追高，短线交易的盈利来源是买入位置好而非追涨。
 
 ## 输出JSON（严格）
 {{
@@ -1313,6 +1493,8 @@ def run_risk_review_node(state: TradingAgentState) -> Dict[str, Any]:
             "blocked_actions": data.get("blocked_actions", []),
             "adjustments": data.get("adjustments", []),
             "notes": data.get("notes", []),
+            "force_exit": data.get("force_exit", []),
+            "force_take_profit": data.get("force_take_profit", []),
             "reasoning": data.get("reasoning", ""),
         }
     }
@@ -1337,7 +1519,7 @@ def run_decision_synthesizer_node(state: TradingAgentState) -> Dict[str, Any]:
     ]) or "无持仓"
 
     cand_summary = "\n".join([
-        f"- {c.get('symbol','')} {c.get('name','')}: ¥{c.get('entry_price',0):.2f} 信心{c.get('confidence',0)}% 理由: {c.get('reason','')}"
+        f"- {c.get('symbol','')} {c.get('name','')}: ¥{(_safe_float(c.get('entry_price')) or 0):.2f} 信心{c.get('confidence',0)}% 理由: {c.get('reason','')}"
         for c in candidate_assessments[:3]
     ]) or "无候选"
 
@@ -1375,9 +1557,11 @@ def run_decision_synthesizer_node(state: TradingAgentState) -> Dict[str, Any]:
 ## 你的决策原则
 1. **风控卫士的force_exit必须执行** — 这是底线
 2. **优先处理持仓** — exit/reduce 优先于 buy，释放资金
-3. **买入要精选** — 只买信心>70%的标的，不要为了买而买
+3. **买入要精选** — 只买信心≥70%的标的，不要为了买而买
 4. **多标的可以同时操作** — 卖出亏损的、买入看好的，一轮可以做多笔
 5. **空仓也是一种策略** — 市场不好时，持币等待比乱买更好
+6. **不追高** — 候选猎手推荐的标的如果当日已涨超5%，信心应打折扣，涨超7%直接砍掉
+7. **回避超买** — RSI>70或KDJ_J>100的标的短线追入风险大，降低信心或不买
 
 ## 输出JSON（严格）
 {{
@@ -1902,8 +2086,8 @@ def should_skip_buy_pick(confidence: Optional[float], quote_pct: float, is_etf: 
                          late_buy_cutoff: dtime) -> Optional[str]:
     if confidence is None:
         return "买入信心缺失"
-    if confidence <= min_confidence:
-        return f"买入信心不足: {format_confidence(confidence)} <= {format_confidence(min_confidence)}"
+    if confidence < min_confidence:
+        return f"买入信心不足: {format_confidence(confidence)} < {format_confidence(min_confidence)}"
     if now_time >= late_buy_cutoff:
         return f"尾盘不新开仓: {now_time.strftime('%H:%M')} >= {late_buy_cutoff.strftime('%H:%M')}"
     if not is_etf and quote_pct > max_chase_pct:
@@ -2742,7 +2926,7 @@ class AutonomousTradingEngine:
         self.max_position_pct = 30.0             # 单标的最大仓位30%
         self.risk_per_trade_pct = 1.5            # 单笔风险1.5%
         self.min_score_to_buy = 68.0             # 保留旧评分字段兼容
-        self.min_buy_confidence = 70.0           # 买入信心必须大于70%
+        self.min_buy_confidence = 70.0           # 买入信心必须≥70%（等于阈值即可买入）
         self.max_chase_pct = 7.0                 # 非ETF当日涨幅超过7%不追
         self.late_buy_cutoff = dtime(14, 30)     # 14:30后不新开仓
         self.profit_protect_pct = 6.0            # 盈利6%后保护成本线
@@ -2857,6 +3041,16 @@ class AutonomousTradingEngine:
         log_decision(db, "scan", reason="AI综合分析中: 持仓管理+选股开仓")
 
         acct = get_account(db)
+        # 按实际账户规模动态校准买入限额（每轮按 acct 重算，避免与资金脱节）
+        # __init__ 默认按1万元设定；账户重置成其他金额时若不同步限额会出现"买不起1手→qty=0→永远不买"
+        real_initial = float(acct.initial_cash or self.initial_cash or 10000)
+        _scale_changed = real_initial != self.initial_cash
+        self.initial_cash = real_initial
+        self.single_buy_max = round(real_initial * self.max_position_pct / 100, 0)
+        self.max_buy_per_day = round(real_initial * 0.6, 0)
+        self.single_buy_min = max(1000, round(self.single_buy_max * 0.1, 0))
+        if _scale_changed:
+            add_realtime_log("info", f"⚙️ 账户规模校准: ¥{real_initial:,.0f} 单笔上限¥{self.single_buy_max:,.0f} 每日上限¥{self.max_buy_per_day:,.0f}")
         positions = db.query(PositionModel).filter(PositionModel.qty > 0).all()
         add_realtime_log("info", f"💰 可用现金: ¥{acct.cash:,.2f}, 持仓: {len(positions)}只")
 
@@ -2957,11 +3151,13 @@ class AutonomousTradingEngine:
             return
         add_realtime_log("success", f"✅ 获取 {len(all_stocks)} 只股票行情")
 
-        # 取成交额前100只活跃股并生成轻量摘要
-        candidates = sorted(all_stocks, key=lambda s: s.get("amount", 0), reverse=True)[:100]
+        # 取成交额前150只活跃股（多取50只留过滤余量）
+        candidates = sorted(all_stocks, key=lambda s: s.get("amount", 0), reverse=True)[:150]
         add_realtime_log("info", f"🧺 候选池初筛: 从 {len(all_stocks)} 只股票中按成交额选出 {len(candidates)} 只活跃股")
         fin_data = fetch_financial_batch()
         candidates_ctx = []
+        _chase_filtered = 0
+        _bearish_filtered = 0
         for stock in candidates:
             enriched = dict(stock)
             try:
@@ -2974,6 +3170,21 @@ class AutonomousTradingEngine:
                     enriched["recent_high"] = max(h["high"] for h in hist[-5:])
                     enriched["recent_low"] = min(h["low"] for h in hist[-5:])
                 enriched["is_etf"] = is_etf_code(enriched["symbol"])
+
+                # ── 候选预过滤：排除追高风险和强下跌趋势 ──
+                _pct = float(enriched.get("pct", 0) or 0)
+                _is_etf = enriched.get("is_etf", False)
+                _trend = enriched.get("trend", "")
+
+                # 非ETF当日涨幅>6%直接排除（追高风险）
+                if not _is_etf and _pct > 6.0:
+                    _chase_filtered += 1
+                    continue
+                # 强下跌趋势排除（MA5<MA10<MA20），ETF除外
+                if not _is_etf and _trend == "bearish":
+                    _bearish_filtered += 1
+                    continue
+
                 if not enriched["is_etf"]:
                     try:
                         val = fetch_valuation(enriched["symbol"])
@@ -2992,8 +3203,22 @@ class AutonomousTradingEngine:
                 pass
             candidates_ctx.append(summarize_candidate_for_agent(enriched))
 
+        if _chase_filtered or _bearish_filtered:
+            add_realtime_log("info", f"🚫 候选预过滤: 排除 {_chase_filtered} 只涨幅过高(>6%)，{_bearish_filtered} 只强下跌趋势")
+
         market_sentiment = calculate_market_sentiment(all_stocks)
         add_realtime_log("info", f"📈 市场情绪: {market_sentiment['sentiment']} (分数: {market_sentiment['score']})")
+
+        # 真实大盘指数 + 财经新闻（补强市场分析师判断维度）
+        # 用超时包装，避免 akshare 联网挂起卡死整个决策周期
+        market_indices = _call_with_timeout(fetch_market_indices, timeout=15, default={})
+        news_list = _call_with_timeout(fetch_market_news, timeout=15, default=[])
+        if market_indices:
+            idx_preview = "，".join([f"{v['name']}{v['pct']:+.2f}%" for v in market_indices.values()])
+            add_realtime_log("info", f"🏛️ 大盘指数: {idx_preview}")
+        if news_list:
+            add_realtime_log("info", f"📰 获取财经新闻 {len(news_list)} 条")
+
         candidate_preview = "，".join([f"{s.get('symbol','')}{s.get('name','')}" for s in candidates_ctx[:5]]) or "无"
         add_realtime_log("info", f"🔎 候选池精筛完成: 保留 {len(candidates_ctx)} 只候选，前5只: {candidate_preview}")
 
@@ -3017,6 +3242,8 @@ class AutonomousTradingEngine:
             candidates_ctx=candidates_ctx,
             market_sentiment=market_sentiment,
             engine_params={"max_positions": self.max_positions, "max_position_pct": self.max_position_pct},
+            market_indices=market_indices,
+            market_news=news_list,
             recent_trades=[],
             recent_decisions=[],
             memory_summary=recall_recent_agent_memory(db, limit=5),

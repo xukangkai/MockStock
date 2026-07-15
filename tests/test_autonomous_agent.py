@@ -153,6 +153,9 @@ def test_summarize_candidate_for_agent_keeps_lightweight_fields():
         "pct": 1.8,
         "amount": 15_200_000_000,
         "ma5": 7.6,
+        "ma10": None,
+        "ma20": None,
+        "trend": None,
         "pe": 18.2,
         "pb": 1.4,
         "net_profit_yoy": 12.5,
@@ -160,6 +163,20 @@ def test_summarize_candidate_for_agent_keeps_lightweight_fields():
         "is_etf": False,
         "recent_high": 7.95,
         "recent_low": 7.42,
+        "rsi6": None,
+        "rsi14": None,
+        "kdj_k": None,
+        "kdj_d": None,
+        "kdj_j": None,
+        "boll_upper": None,
+        "boll_mid": None,
+        "boll_lower": None,
+        "momentum_5d": None,
+        "momentum_10d": None,
+        "macd_dif": None,
+        "macd_dea": None,
+        "macd_hist": None,
+        "vol_ratio": None,
     }
 
 
@@ -209,7 +226,7 @@ def test_comprehensive_trade_passes_top_100_summaries_to_agent(monkeypatch, db):
             "symbol": f"600{i:03d}",
             "name": f"样本{i}",
             "price": 10 + i * 0.01,
-            "pct": i * 0.1,
+            "pct": i * 0.04,
             "amount": 1_000_000_000 - i,
             "extra_noise": f"raw-only-{i}",
         }
@@ -239,6 +256,13 @@ def test_comprehensive_trade_passes_top_100_summaries_to_agent(monkeypatch, db):
     monkeypatch.setattr(web_app, "fetch_valuation", lambda symbol: {"pe": 11.8, "pb": 1.6, "total_mv": 888000} if symbol == "600000" else None)
     monkeypatch.setattr(web_app, "calculate_market_sentiment", lambda stocks: {"sentiment": "neutral", "score": 50})
     monkeypatch.setattr(web_app, "recall_recent_agent_memory", lambda db, limit=5: {"items": [], "notes": []})
+    # mock 新增的真实联网调用，避免测试触发 akshare 网络请求而挂起
+    monkeypatch.setattr(
+        web_app,
+        "fetch_market_indices",
+        lambda: {"上证指数": {"name": "上证指数", "price": 3200.0, "pct": 1.23}},
+    )
+    monkeypatch.setattr(web_app, "fetch_market_news", lambda: [])
 
     def fake_run_agent_cycle_with_fallback(db_session, context):
         first_candidate = context["candidates"][0]
@@ -260,9 +284,9 @@ def test_comprehensive_trade_passes_top_100_summaries_to_agent(monkeypatch, db):
 
     engine._comprehensive_trade(db)
 
-    assert captured["candidate_count"] == 100
+    assert captured["candidate_count"] == 120
     assert captured["first_symbol"] == "600000"
-    assert captured["last_symbol"] == "600099"
+    assert captured["last_symbol"] == "600119"
     assert captured["first_candidate"] == {
         "symbol": "600000",
         "name": "样本0",
@@ -270,6 +294,9 @@ def test_comprehensive_trade_passes_top_100_summaries_to_agent(monkeypatch, db):
         "pct": 0.0,
         "amount": 1_000_000_000.0,
         "ma5": 10.2,
+        "ma10": None,
+        "ma20": None,
+        "trend": None,
         "pe": 11.8,
         "pb": 1.6,
         "net_profit_yoy": 15.2,
@@ -277,6 +304,20 @@ def test_comprehensive_trade_passes_top_100_summaries_to_agent(monkeypatch, db):
         "is_etf": False,
         "recent_high": 11.2,
         "recent_low": 9.5,
+        "rsi6": None,
+        "rsi14": None,
+        "kdj_k": None,
+        "kdj_d": None,
+        "kdj_j": None,
+        "boll_upper": None,
+        "boll_mid": None,
+        "boll_lower": None,
+        "momentum_5d": None,
+        "momentum_10d": None,
+        "macd_dif": None,
+        "macd_dea": None,
+        "macd_hist": None,
+        "vol_ratio": None,
     }
     assert "extra_noise" not in captured["first_candidate"]
     assert "total_mv" not in captured["first_candidate"]

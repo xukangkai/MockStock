@@ -122,7 +122,7 @@ def test_should_skip_buy_pick_rejects_missing_confidence():
     assert reason == "买入信心缺失"
 
 
-def test_should_skip_buy_pick_rejects_confidence_at_threshold():
+def test_should_skip_buy_pick_allows_confidence_at_threshold():
     reason = web_app.should_skip_buy_pick(
         confidence=70.0,
         quote_pct=1.2,
@@ -132,7 +132,20 @@ def test_should_skip_buy_pick_rejects_confidence_at_threshold():
         max_chase_pct=7.0,
         late_buy_cutoff=web_app.dtime(14, 30),
     )
-    assert reason == "买入信心不足: 70% <= 70%"
+    assert reason is None
+
+
+def test_should_skip_buy_pick_rejects_confidence_below_threshold():
+    reason = web_app.should_skip_buy_pick(
+        confidence=69.0,
+        quote_pct=1.2,
+        is_etf=False,
+        now_time=web_app.dtime(10, 0),
+        min_confidence=70.0,
+        max_chase_pct=7.0,
+        late_buy_cutoff=web_app.dtime(14, 30),
+    )
+    assert reason == "买入信心不足: 69% < 70%"
 
 
 def test_should_skip_buy_pick_rejects_chasing_non_etf():
